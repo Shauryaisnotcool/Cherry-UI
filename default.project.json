@@ -1,9 +1,13 @@
 {
   "name": "CherryUI",
   "tree": {
-    "$className": "Folder",
-    "CherryUI": {
-      "$path": "src"
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "CherryUI": {
+        "$className": "Folder",
+        "$path": "src"
+      }
     }
   }
 }
