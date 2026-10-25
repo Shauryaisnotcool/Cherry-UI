@@ -1,0 +1,9 @@
+{
+  "name": "CherryUI",
+  "tree": {
+    "$className": "Folder",
+    "CherryUI": {
+      "$path": "src"
+    }
+  }
+}

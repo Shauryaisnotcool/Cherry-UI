@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="600" viewBox="0 0 760 600" font-family="Arial, Helvetica, sans-serif" role="img" aria-label="Cherry UI ESP preview mockup">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#14080D"/>
+      <stop offset="1" stop-color="#08080A"/>
+    </linearGradient>
+    <linearGradient id="accent2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF4D6D"/>
+      <stop offset="1" stop-color="#FF8A9E"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="760" height="600" fill="url(#bg2)"/>
+  <circle cx="380" cy="80" r="260" fill="#FF4D6D" opacity="0.07"/>
+
+  <!-- card -->
+  <rect x="40" y="40" width="680" height="500" rx="10" fill="#17171A" stroke="#24242A"/>
+
+  <rect x="58" y="56" width="42" height="16" rx="8" fill="#3A1620" stroke="#FF4D6D" stroke-opacity="0.55"/>
+  <circle cx="68" cy="64" r="2.4" fill="#FF4D6D"/>
+  <text x="75" y="67.5" font-size="7.5" font-weight="bold" fill="#FF4D6D">LIVE</text>
+  <text x="110" y="68" font-size="13" font-weight="bold" fill="#F2F2F5">ESP Preview</text>
+  <text x="702" y="68" font-size="10" fill="#9A9AA7" text-anchor="end">42 m</text>
+
+  <!-- chips -->
+  <rect x="58" y="82" width="78" height="20" rx="4" fill="#FF4D6D" fill-opacity="0.18" stroke="#FF4D6D" stroke-opacity="0.6"/>
+  <circle cx="70" cy="92" r="2.6" fill="#FF4D6D"/>
+  <text x="78" y="95.5" font-size="9" fill="#FF4D6D">Highlight</text>
+  <rect x="144" y="82" width="64" height="20" rx="4" fill="#FF4D6D" fill-opacity="0.18" stroke="#FF4D6D" stroke-opacity="0.6"/>
+  <circle cx="156" cy="92" r="2.6" fill="#FF4D6D"/>
+  <text x="164" y="95.5" font-size="9" fill="#FF4D6D">Box</text>
+  <rect x="216" y="82" width="70" height="20" rx="4" fill="#FF4D6D" fill-opacity="0.18" stroke="#FF4D6D" stroke-opacity="0.6"/>
+  <circle cx="228" cy="92" r="2.6" fill="#FF4D6D"/>
+  <text x="236" y="95.5" font-size="9" fill="#FF4D6D">Tracer</text>
+  <rect x="294" y="82" width="64" height="20" rx="4" fill="#1B1B20" stroke="#2A2A31"/>
+  <circle cx="306" cy="92" r="2.6" fill="#5E5E6A"/>
+  <text x="314" y="95.5" font-size="9" fill="#9A9AA7">Name</text>
+
+  <!-- stage -->
+  <rect x="58" y="114" width="644" height="404" rx="6" fill="#0E0E10" stroke="#24242A"/>
+  <line x1="219" y1="114" x2="219" y2="518" stroke="#1C1C22"/>
+  <line x1="380" y1="114" x2="380" y2="518" stroke="#1C1C22"/>
+  <line x1="541" y1="114" x2="541" y2="518" stroke="#1C1C22"/>
+  <line x1="58" y1="235" x2="702" y2="235" stroke="#1C1C22"/>
+  <line x1="58" y1="356" x2="702" y2="356" stroke="#1C1C22"/>
+  <line x1="58" y1="477" x2="702" y2="477" stroke="#1C1C22"/>
+
+  <!-- tracer -->
+  <line x1="380" y1="512" x2="380" y2="398" stroke="#FF4D6D" stroke-width="1.4" opacity="0.5"/>
+
+  <!-- glow -->
+  <rect x="320" y="236" width="120" height="230" rx="30" fill="#FF4D6D" opacity="0.15"/>
+
+  <!-- character -->
+  <rect x="358" y="244" width="44" height="44" rx="22" fill="#2A2A31" stroke="#FF4D6D" stroke-opacity="0.7"/>
+  <rect x="352" y="294" width="56" height="86" rx="10" fill="#2A2A31" stroke="#FF4D6D" stroke-opacity="0.7"/>
+  <rect x="328" y="298" width="16" height="74" rx="8" fill="#2A2A31" stroke="#FF4D6D" stroke-opacity="0.5" transform="rotate(4 336 335)"/>
+  <rect x="416" y="298" width="16" height="74" rx="8" fill="#2A2A31" stroke="#FF4D6D" stroke-opacity="0.5" transform="rotate(-4 424 335)"/>
+  <rect x="354" y="384" width="20" height="76" rx="8" fill="#2A2A31" stroke="#FF4D6D" stroke-opacity="0.5"/>
+  <rect x="386" y="384" width="20" height="76" rx="8" fill="#2A2A31" stroke="#FF4D6D" stroke-opacity="0.5"/>
+  <circle cx="370" cy="261" r="2.6" fill="#0E0E10"/>
+  <circle cx="390" cy="261" r="2.6" fill="#0E0E10"/>
+  <rect x="372" y="273" width="16" height="2.4" rx="1.2" fill="#0E0E10"/>
+
+  <!-- box + brackets -->
+  <rect x="314" y="222" width="132" height="244" fill="none" stroke="#FF4D6D" stroke-width="1.8"/>
+  <path d="M314 222 h22 M314 222 v22 M446 222 h-22 M446 222 v22 M314 466 h22 M314 466 v-22 M446 466 h-22 M446 466 v-22" stroke="#FF4D6D" stroke-width="3"/>
+
+  <!-- name tag -->
+  <rect x="286" y="156" width="188" height="50" rx="5" fill="#0B0B0D" fill-opacity="0.92" stroke="#FF4D6D" stroke-opacity="0.55"/>
+  <text x="380" y="180" font-size="14" font-weight="bold" fill="#F2F2F5" text-anchor="middle">Player</text>
+  <rect x="298" y="190" width="164" height="4" rx="2" fill="#26262C"/>
+  <rect x="298" y="190" width="118" height="4" rx="2" fill="#4FE08C"/>
+
+  <text x="380" y="566" font-size="10" fill="#5E5E6A" text-anchor="middle">Highlight · Box · Tracer · Name — toggled live at 30 Hz</text>
+</svg>

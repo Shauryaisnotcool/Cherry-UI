@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Cherry UI logo">
+  <defs>
+    <linearGradient id="berry" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF9BB0"/>
+      <stop offset="0.55" stop-color="#FF5C7A"/>
+      <stop offset="1" stop-color="#D81E42"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#A7F3D0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.55" r="0.55">
+      <stop offset="0" stop-color="#FF4D6D" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#FF4D6D" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="128" cy="140" r="112" fill="url(#glow)"/>
+
+  <!-- stems -->
+  <path d="M126 46 C112 78 94 104 88 126" fill="none" stroke="#4ADE80" stroke-width="6" stroke-linecap="round"/>
+  <path d="M130 46 C146 74 158 102 160 132" fill="none" stroke="#4ADE80" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- leaf / petal -->
+  <path d="M132 42 C156 18 198 18 216 40 C198 62 158 66 132 42 Z" fill="url(#leaf)"/>
+  <path d="M140 42 C160 36 186 34 206 40" fill="none" stroke="#0B3B22" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+
+  <!-- cherries -->
+  <circle cx="88" cy="160" r="38" fill="url(#berry)"/>
+  <circle cx="160" cy="174" r="40" fill="url(#berry)"/>
+
+  <ellipse cx="76" cy="146" rx="10" ry="7" fill="#FFFFFF" opacity="0.55" transform="rotate(-28 76 146)"/>
+  <ellipse cx="148" cy="158" rx="10" ry="7" fill="#FFFFFF" opacity="0.5" transform="rotate(-28 148 158)"/>
+
+  <!-- falling petal accent -->
+  <path d="M196 130 C210 122 222 126 226 138 C214 146 200 144 196 130 Z" fill="#FF8A9E" opacity="0.75"/>
+</svg>

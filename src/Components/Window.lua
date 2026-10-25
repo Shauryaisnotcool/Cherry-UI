@@ -1,0 +1,1022 @@
+--[[
+	Components/Window.lua
+	The main Cherry UI window.
+
+	Reference layout:
+	  header  - logo, title, search box, close button (drag handle)
+	  tab bar - horizontal tabs with an accent underline + theme dots on the right
+	  content - lazily built tab pages
+
+	Performance notes:
+	  * `Main` clips its descendants, so nothing draws outside the rounded panel
+	  * one global InputChanged/InputEnded connection handles drag and resize
+	  * a UIScale keeps the window usable on smaller viewports
+]]
+
+local UserInputService = game:GetService("UserInputService")
+
+local Create = require(script.Parent.Parent.Utils.Create)
+local Tween = require(script.Parent.Parent.Utils.Tween)
+local Logo = require(script.Parent.Parent.Core.Logo)
+local Tab = require(script.Parent.Tab)
+
+local Window = {}
+Window.__index = Window
+
+local HEADER_HEIGHT = 44
+local TAB_BAR_HEIGHT = 34
+local TAB_WIDTH = 86
+
+function Window.new(library, config)
+	config = config or {}
+
+	local self = setmetatable({}, Window)
+
+	self.Library = library
+	self.Config = config
+	self.Title = tostring(config.Title or "Cherry UI")
+	self.Subtitle = tostring(config.Subtitle or ("v" .. tostring(library.Version)))
+	self.Width = config.Width or 640
+	self.Height = config.Height or 460
+	self.MinWidth = config.MinWidth or 480
+	self.MinHeight = config.MinHeight or 300
+	self.Tabs = {}
+	self.ActiveTab = nil
+	self.Visible = false
+	self.Destroyed = false
+	self.SearchEntries = {}
+
+	self._connections = {}
+	self._baseScale = 1
+	self._animScale = 1
+	self._dragging = false
+	self._resizing = false
+
+	self:_build()
+	self:_bindEvents()
+	self:_updateScale()
+
+	library.Windows[self] = true
+
+	if config.StartOpen ~= false then
+		self:Open()
+	end
+
+	return self
+end
+
+function Window:_track(connection)
+	table.insert(self._connections, connection)
+	return connection
+end
+
+function Window:_build()
+	local library = self.Library
+	local palette = library.Palette
+
+	self.Root = Create.new("Frame", {
+		Name = "CherryWindow",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(self.Width, self.Height),
+		BackgroundTransparency = 1,
+		Visible = false,
+		ZIndex = 10,
+		Parent = library.ScreenGui,
+	})
+
+	self.Scale = Create.new("UIScale", { Scale = 1, Parent = self.Root })
+
+	for index = 1, 3 do
+		local spread = index * 5
+		local shadow = Create.new("Frame", {
+			Name = "Shadow" .. tostring(index),
+			BackgroundColor3 = Color3.new(0, 0, 0),
+			BackgroundTransparency = 0.82 + index * 0.04,
+			Position = UDim2.fromOffset(-spread, -spread + 3),
+			Size = UDim2.new(1, spread * 2, 1, spread * 2),
+			ZIndex = 1,
+			Parent = self.Root,
+		})
+		Create.corner(shadow, 9 + spread)
+	end
+
+	self.Frame = Create.new("Frame", {
+		Name = "Main",
+		BackgroundTransparency = 0.03,
+		Size = UDim2.fromScale(1, 1),
+		ClipsDescendants = true,
+		ZIndex = 2,
+		Parent = self.Root,
+	})
+	library:Styled(self.Frame, "Background", "BackgroundColor3")
+	Create.corner(self.Frame, 8)
+	library:Styled(Create.stroke(self.Frame, palette.Outline, 1, 0.15), "Outline", "Color")
+
+	-- Top sheen + a single accent glow, kept subtle.
+	local sheen = Create.new("Frame", {
+		Name = "Sheen",
+		Size = UDim2.new(1, 0, 0.3, 0),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+		Parent = self.Frame,
+	})
+	Create.corner(sheen, 8)
+	Create.new("UIGradient", {
+		Rotation = 90,
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.955),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		Parent = sheen,
+	})
+
+	local glow = Create.new("Frame", {
+		Name = "Glow",
+		Position = UDim2.fromOffset(-110, -120),
+		Size = UDim2.fromOffset(340, 260),
+		BackgroundTransparency = 0.92,
+		ZIndex = 2,
+		Parent = self.Frame,
+	})
+	Create.corner(glow, UDim.new(1, 0))
+	library:Styled(glow, "Primary", "BackgroundColor3")
+	Create.new("UIGradient", {
+		Rotation = 45,
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.72),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		Parent = glow,
+	})
+
+	-- Header.
+	self.Header = Create.new("Frame", {
+		Name = "Header",
+		Size = UDim2.new(1, 0, 0, HEADER_HEIGHT),
+		BackgroundTransparency = 1,
+		ZIndex = 5,
+		Parent = self.Frame,
+	})
+
+	self.TitleBar = Create.textButton({
+		Name = "TitleBar",
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 5,
+		Parent = self.Header,
+	})
+
+	self.Logo = Logo.new(library, {
+		Parent = self.TitleBar,
+		Position = UDim2.fromOffset(14, 10),
+		Size = UDim2.fromOffset(24, 24),
+		ZIndex = 6,
+	})
+
+	self.TitleLabel = Create.label({
+		Name = "Title",
+		Text = self.Title,
+		Font = Enum.Font.GothamBold,
+		TextSize = 14,
+		Position = UDim2.fromOffset(46, 3),
+		Size = UDim2.new(0.5, -46, 0, 20),
+		ZIndex = 6,
+		Parent = self.TitleBar,
+	})
+	library:Styled(self.TitleLabel, "Text", "TextColor3")
+
+	self.SubtitleLabel = Create.label({
+		Name = "Subtitle",
+		Text = self.Subtitle,
+		TextSize = 10,
+		Position = UDim2.fromOffset(46, 21),
+		Size = UDim2.new(0.5, -46, 0, 14),
+		ZIndex = 6,
+		Parent = self.TitleBar,
+	})
+	library:Styled(self.SubtitleLabel, "SubText", "TextColor3")
+
+	self.SearchFrame = Create.new("Frame", {
+		Name = "SearchFrame",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -48, 0, 10),
+		Size = UDim2.fromOffset(176, 24),
+		BackgroundTransparency = 0.25,
+		ZIndex = 7,
+		Parent = self.Header,
+	})
+	Create.corner(self.SearchFrame, 6)
+	library:Styled(self.SearchFrame, "Surface", "BackgroundColor3")
+	self.SearchStroke = Create.stroke(self.SearchFrame, palette.Outline, 1, 0.35)
+	library:Styled(self.SearchStroke, "Outline", "Color")
+
+	self.SearchIcon = Create.label({
+		Name = "Icon",
+		Text = "⌕",
+		TextSize = 14,
+		Position = UDim2.fromOffset(7, 0),
+		Size = UDim2.fromOffset(14, 24),
+		ZIndex = 7,
+		Parent = self.SearchFrame,
+	})
+	library:Styled(self.SearchIcon, "Placeholder", "TextColor3")
+
+	self.SearchBox = Create.new("TextBox", {
+		Name = "Search",
+		Position = UDim2.fromOffset(26, 0),
+		Size = UDim2.new(1, -32, 1, 0),
+		BackgroundTransparency = 1,
+		Text = "",
+		PlaceholderText = "Search settings",
+		Font = Enum.Font.Gotham,
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClearTextOnFocus = false,
+		ZIndex = 7,
+		Parent = self.SearchFrame,
+	})
+	library:Styled(self.SearchBox, "Text", "TextColor3")
+	library:Styled(self.SearchBox, "Placeholder", "PlaceholderColor3")
+
+	self.CloseButton = Create.textButton({
+		Name = "Close",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -12, 0, HEADER_HEIGHT / 2),
+		Size = UDim2.fromOffset(24, 24),
+		BackgroundColor3 = palette.SurfaceHigh,
+		BackgroundTransparency = 1,
+		Text = "✕",
+		TextSize = 13,
+		TextColor3 = palette.SubText,
+		ZIndex = 7,
+		Parent = self.Header,
+	})
+	Create.corner(self.CloseButton, 12)
+
+	-- Tab bar.
+	self.TabBar = Create.new("Frame", {
+		Name = "TabBar",
+		Position = UDim2.fromOffset(0, HEADER_HEIGHT),
+		Size = UDim2.new(1, 0, 0, TAB_BAR_HEIGHT),
+		BackgroundColor3 = palette.Surface,
+		BackgroundTransparency = 0.55,
+		ZIndex = 5,
+		Parent = self.Frame,
+	})
+	library:Styled(self.TabBar, "Surface", "BackgroundColor3")
+
+	local tabBarDivider = Create.new("Frame", {
+		Name = "Divider",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromScale(0, 1),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundTransparency = 0.4,
+		ZIndex = 5,
+		Parent = self.TabBar,
+	})
+	library:Styled(tabBarDivider, "Outline", "BackgroundColor3")
+
+	self.TabList = Create.new("Frame", {
+		Name = "TabList",
+		Size = UDim2.new(1, -110, 1, 0),
+		BackgroundTransparency = 1,
+		ZIndex = 5,
+		Parent = self.TabBar,
+	})
+	Create.padding(self.TabList, 0, 0, 0, 8)
+	Create.new("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 2),
+		HorizontalAlignment = Enum.HorizontalAlignment.Left,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Parent = self.TabList,
+	})
+
+	-- Theme dots on the right side of the tab bar.
+	self.ThemeRow = Create.new("Frame", {
+		Name = "Themes",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -10, 0.5, 0),
+		Size = UDim2.fromOffset(96, 18),
+		BackgroundTransparency = 1,
+		ZIndex = 6,
+		Parent = self.TabBar,
+	})
+	Create.new("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, 6),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Parent = self.ThemeRow,
+	})
+
+	self._themeDots = {}
+
+	for index, name in ipairs(library:GetThemeNames()) do
+		local theme = library.Themes[name]
+		if theme then
+			local dot = Create.textButton({
+				Name = tostring(name) .. "Theme",
+				Size = UDim2.fromOffset(10, 10),
+				BackgroundColor3 = theme.Primary,
+				BackgroundTransparency = 0.35,
+				Text = "",
+				ZIndex = 6,
+				Parent = self.ThemeRow,
+			})
+			dot.LayoutOrder = index
+			Create.corner(dot, UDim.new(1, 0))
+
+			local stroke = Create.stroke(dot, Color3.new(1, 1, 1), 1, 1)
+
+			self:_track(dot.Activated:Connect(function()
+				library:SetTheme(name)
+			end))
+
+			self:_track(dot.MouseEnter:Connect(function()
+				Tween.play(dot, { BackgroundTransparency = 0 }, Tween.Info.Fast)
+			end))
+
+			self:_track(dot.MouseLeave:Connect(function()
+				self:_updateThemeDots()
+			end))
+
+			self._themeDots[name] = { Button = dot, Stroke = stroke }
+		end
+	end
+
+	-- Content.
+	self.Content = Create.new("Frame", {
+		Name = "Content",
+		Position = UDim2.fromOffset(0, HEADER_HEIGHT + TAB_BAR_HEIGHT),
+		Size = UDim2.new(1, 0, 1, -(HEADER_HEIGHT + TAB_BAR_HEIGHT)),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		ZIndex = 5,
+		Parent = self.Frame,
+	})
+
+	self.NoResults = Create.label({
+		Name = "NoResults",
+		Text = "No settings match your search.",
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextYAlignment = Enum.TextYAlignment.Center,
+		Position = UDim2.fromScale(0, 0.5),
+		Size = UDim2.new(1, 0, 0, 40),
+		Visible = false,
+		ZIndex = 8,
+		Parent = self.Content,
+	})
+	library:Styled(self.NoResults, "SubText", "TextColor3")
+
+	-- Resize grip.
+	self.ResizeGrip = Create.textButton({
+		Name = "Resize",
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -3, 1, -3),
+		Size = UDim2.fromOffset(16, 16),
+		ZIndex = 8,
+		Parent = self.Frame,
+	})
+
+	for index = 0, 2 do
+		local dot = Create.new("Frame", {
+			Name = "GripDot",
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.fromOffset(-4 - index * 4, -4 - index * 4),
+			Size = UDim2.fromOffset(2, 2),
+			BackgroundColor3 = palette.SubText,
+			BackgroundTransparency = 0.35 + index * 0.15,
+			ZIndex = 8,
+			Parent = self.ResizeGrip,
+		})
+		Create.corner(dot, UDim.new(1, 0))
+	end
+
+	self:_updateThemeDots()
+end
+
+function Window:_bindEvents()
+	self:_track(self.TitleBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			self:_startDrag(input)
+		end
+	end))
+
+	self:_track(self.ResizeGrip.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			self:_startResize(input)
+		end
+	end))
+
+	self:_track(UserInputService.InputChanged:Connect(function(input)
+		self:_onInputChanged(input)
+	end))
+
+	self:_track(UserInputService.InputEnded:Connect(function(input)
+		self:_onInputEnded(input)
+	end))
+
+	self:_track(self.CloseButton.Activated:Connect(function()
+		self:Close()
+	end))
+
+	self:_track(self.CloseButton.MouseEnter:Connect(function()
+		Tween.play(self.CloseButton, {
+			BackgroundTransparency = 0.15,
+			BackgroundColor3 = self.Library.Palette.Danger,
+			TextColor3 = Color3.new(1, 1, 1),
+		}, Tween.Info.Fast)
+	end))
+
+	self:_track(self.CloseButton.MouseLeave:Connect(function()
+		Tween.play(self.CloseButton, {
+			BackgroundTransparency = 1,
+			BackgroundColor3 = self.Library.Palette.SurfaceHigh,
+			TextColor3 = self.Library.Palette.SubText,
+		}, Tween.Info.Fast)
+	end))
+
+	self:_track(self.SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+		self:Filter(self.SearchBox.Text)
+	end))
+
+	self:_track(self.SearchBox.Focused:Connect(function()
+		Tween.play(self.SearchStroke, {
+			Color = self.Library.Palette.Primary,
+			Transparency = 0.1,
+		}, Tween.Info.Fast)
+	end))
+
+	self:_track(self.SearchBox.FocusLost:Connect(function()
+		Tween.play(self.SearchStroke, {
+			Color = self.Library.Palette.Outline,
+			Transparency = 0.35,
+		}, Tween.Info.Fast)
+	end))
+
+	local screenGui = self.Library.ScreenGui
+	if screenGui then
+		self:_track(screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+			self:_updateScale()
+		end))
+	end
+
+	self:_track(self.Library.ThemeManager.Changed:Connect(function()
+		self:_updateThemeDots()
+		for _, tab in ipairs(self.Tabs) do
+			self:_setTabActive(tab, tab == self.ActiveTab)
+		end
+	end))
+end
+
+function Window:_updateScale()
+	local screenGui = self.Library.ScreenGui
+	if not screenGui then
+		return
+	end
+
+	local size = screenGui.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 then
+		return
+	end
+
+	local scale = math.min(size.X / 1280, size.Y / 800)
+	self._baseScale = math.clamp(scale, 0.7, 1.1)
+	self:_applyScale()
+end
+
+function Window:_applyScale()
+	if self.Scale then
+		self.Scale.Scale = self._baseScale * self._animScale
+	end
+end
+
+function Window:_startDrag(input)
+	if not self.Visible or self.Destroyed then
+		return
+	end
+
+	if UserInputService:GetFocusedTextBox() then
+		return
+	end
+
+	self._dragging = true
+	self._dragOrigin = self.Library.Overlay.AbsolutePosition
+
+	local absolute = self.Root.AbsolutePosition - self._dragOrigin
+	local size = self.Root.AbsoluteSize
+
+	self._dragStartPosition = Vector2.new(absolute.X + size.X * 0.5, absolute.Y + size.Y * 0.5)
+	self._dragStartMouse = Vector2.new(input.Position.X, input.Position.Y)
+end
+
+function Window:_startResize(input)
+	if not self.Visible or self.Destroyed then
+		return
+	end
+
+	self._resizing = true
+	self._resizeStartMouse = Vector2.new(input.Position.X, input.Position.Y)
+	self._resizeStartSize = Vector2.new(self.Root.AbsoluteSize.X, self.Root.AbsoluteSize.Y)
+end
+
+function Window:_onInputChanged(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement
+		and input.UserInputType ~= Enum.UserInputType.Touch
+	then
+		return
+	end
+
+	if self._dragging then
+		local delta = Vector2.new(input.Position.X, input.Position.Y) - self._dragStartMouse
+		local center = self._dragStartPosition + delta
+		local viewport = self.Library.Overlay.AbsoluteSize
+		local size = self.Root.AbsoluteSize
+
+		local minX = size.X * 0.5 - 24
+		local maxX = viewport.X - size.X * 0.5 + 24
+		local minY = size.Y * 0.5 - 24
+		local maxY = viewport.Y - size.Y * 0.5 + 24
+
+		self.Root.Position = UDim2.fromOffset(
+			math.clamp(center.X, minX, math.max(minX, maxX)),
+			math.clamp(center.Y, minY, math.max(minY, maxY))
+		)
+	elseif self._resizing then
+		local delta = Vector2.new(input.Position.X, input.Position.Y) - self._resizeStartMouse
+		local viewport = self.Library.Overlay.AbsoluteSize
+		local factor = self.Scale.Scale
+
+		if factor <= 0 then
+			factor = 1
+		end
+
+		local maxWidth = (viewport.X - 32) / factor
+		local maxHeight = (viewport.Y - 32) / factor
+		local width = math.clamp(
+			(self._resizeStartSize.X + delta.X) / factor,
+			self.MinWidth,
+			math.max(self.MinWidth, maxWidth)
+		)
+		local height = math.clamp(
+			(self._resizeStartSize.Y + delta.Y) / factor,
+			self.MinHeight,
+			math.max(self.MinHeight, maxHeight)
+		)
+
+		self.Root.Size = UDim2.fromOffset(math.floor(width), math.floor(height))
+	end
+end
+
+function Window:_onInputEnded(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+	then
+		self._dragging = false
+		self._resizing = false
+	end
+end
+
+function Window:AddTab(name, icon, builder)
+	if self.Destroyed then
+		return nil
+	end
+
+	local tab = Tab.new(self.Library, self, {
+		Name = name,
+		Icon = icon,
+		Builder = builder,
+	})
+	table.insert(self.Tabs, tab)
+
+	local palette = self.Library.Palette
+	local button = Create.textButton({
+		Name = tostring(name) .. "Tab",
+		Size = UDim2.fromOffset(TAB_WIDTH, 26),
+		BackgroundColor3 = palette.SurfaceHigh,
+		BackgroundTransparency = 1,
+		ZIndex = 6,
+		Parent = self.TabList,
+	})
+	button.LayoutOrder = #self.Tabs
+	Create.corner(button, 5)
+
+	local hasIcon = type(icon) == "string" and icon ~= ""
+	local offset = hasIcon and 26 or 8
+
+	if hasIcon then
+		tab.ButtonIcon = Create.label({
+			Name = "Icon",
+			Text = icon,
+			TextSize = 13,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			TextColor3 = palette.SubText,
+			Position = UDim2.fromOffset(7, 0),
+			Size = UDim2.fromOffset(16, 26),
+			ZIndex = 7,
+			Parent = button,
+		})
+	end
+
+	local nameLabel = Create.label({
+		Name = "Name",
+		Text = tostring(name),
+		TextSize = 11,
+		TextColor3 = palette.SubText,
+		Position = UDim2.fromOffset(offset, 0),
+		Size = UDim2.new(1, -offset - 4, 1, 0),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = 7,
+		Parent = button,
+	})
+
+	local indicator = Create.new("Frame", {
+		Name = "Indicator",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, 0),
+		Size = UDim2.fromOffset(18, 2),
+		BackgroundTransparency = 1,
+		ZIndex = 7,
+		Parent = button,
+	})
+	Create.corner(indicator, 1)
+	self.Library.ThemeManager:Bind(indicator, "BackgroundColor3", "Primary")
+
+	tab.Button = button
+	tab.ButtonLabel = nameLabel
+	tab.Indicator = indicator
+
+	self:_track(button.MouseEnter:Connect(function()
+		if self.ActiveTab ~= tab then
+			Tween.play(button, { BackgroundTransparency = 0.7 }, Tween.Info.Fast)
+		end
+	end))
+
+	self:_track(button.MouseLeave:Connect(function()
+		if self.ActiveTab ~= tab then
+			Tween.play(button, { BackgroundTransparency = 1 }, Tween.Info.Fast)
+		end
+	end))
+
+	self:_track(button.Activated:Connect(function()
+		self:SelectTab(tab)
+	end))
+
+	if #self.Tabs == 1 then
+		self:SelectTab(tab, true)
+	end
+
+	return tab
+end
+
+function Window:_setTabActive(tab, active)
+	if tab.Destroyed or not tab.Button or not tab.ButtonLabel or not tab.Indicator then
+		return
+	end
+
+	local palette = self.Library.Palette
+	local info = Tween.Info.Fast
+
+	Tween.play(tab.Button, {
+		BackgroundTransparency = active and 0.75 or 1,
+		BackgroundColor3 = palette.SurfaceHigh,
+	}, info)
+
+	Tween.play(tab.ButtonLabel, {
+		TextColor3 = active and palette.Primary or palette.SubText,
+	}, info)
+
+	if tab.ButtonIcon then
+		Tween.play(tab.ButtonIcon, {
+			TextColor3 = active and palette.Primary or palette.SubText,
+		}, info)
+	end
+
+	Tween.play(tab.Indicator, {
+		BackgroundTransparency = active and 0 or 1,
+		Size = UDim2.fromOffset(active and 22 or 10, 2),
+	}, info)
+end
+
+function Window:SelectTab(tab, instant)
+	if self.Destroyed or not tab or tab.Destroyed then
+		return
+	end
+
+	if self.ActiveTab == tab then
+		tab:EnsureBuilt()
+		return
+	end
+
+	local popup = self.Library:GetActivePopup()
+	if popup then
+		popup:Close()
+	end
+
+	local previous = self.ActiveTab
+	self.ActiveTab = tab
+	tab:EnsureBuilt()
+
+	if previous and previous ~= tab then
+		previous.Content.Visible = false
+	end
+
+	local content = tab.Content
+	content.Visible = true
+
+	if instant then
+		content.GroupTransparency = 0
+		content.Position = UDim2.fromOffset(0, 0)
+	else
+		content.GroupTransparency = 1
+		content.Position = UDim2.fromOffset(0, 8)
+		Tween.play(content, {
+			GroupTransparency = 0,
+			Position = UDim2.fromOffset(0, 0),
+		}, Tween.Info.Smooth)
+	end
+
+	for _, other in ipairs(self.Tabs) do
+		self:_setTabActive(other, other == tab)
+	end
+
+	self:Filter(self.SearchBox.Text)
+end
+
+function Window:RegisterSearchEntry(component)
+	local keywords = component.Config.Keywords
+	if type(keywords) == "string" then
+		keywords = { keywords }
+	end
+
+	local entry = {
+		Component = component,
+		Label = component.Name,
+		Keywords = keywords,
+		Tab = component.Section.Tab,
+	}
+
+	table.insert(self.SearchEntries, entry)
+	return entry
+end
+
+function Window:UnregisterSearchEntry(component)
+	for index = #self.SearchEntries, 1, -1 do
+		if self.SearchEntries[index].Component == component then
+			table.remove(self.SearchEntries, index)
+		end
+	end
+end
+
+function Window:Filter(query)
+	if self.Destroyed then
+		return
+	end
+
+	local rawQuery = tostring(query or "")
+	query = string.lower(rawQuery)
+	local filtering = #query > 0
+
+	if filtering then
+		for _, tab in ipairs(self.Tabs) do
+			tab:EnsureBuilt()
+		end
+	end
+
+	for _, entry in ipairs(self.SearchEntries) do
+		local match = true
+
+		if filtering then
+			match = string.find(string.lower(entry.Label), query, 1, true) ~= nil
+
+			if not match and entry.Keywords then
+				for _, keyword in ipairs(entry.Keywords) do
+					if string.find(string.lower(tostring(keyword)), query, 1, true) then
+						match = true
+						break
+					end
+				end
+			end
+		end
+
+		if entry.Component.SearchMatch ~= match then
+			entry.Component.SearchMatch = match
+			entry.Component:UpdateVisibility()
+		end
+	end
+
+	for _, tab in ipairs(self.Tabs) do
+		tab:UpdateVisibility(filtering)
+	end
+
+	local active = self.ActiveTab
+	if filtering and active and not active.HasContent then
+		self.NoResults.Text = 'No settings match "' .. rawQuery .. '"'
+		self.NoResults.Visible = true
+	else
+		self.NoResults.Visible = false
+	end
+end
+
+function Window:Open(animate)
+	if self.Destroyed or self.Visible then
+		return
+	end
+
+	self.Visible = true
+	self:_updateScale()
+	self.Root.Visible = true
+
+	if animate == false then
+		self.Root.GroupTransparency = 0
+		self._animScale = 1
+		self:_applyScale()
+		return
+	end
+
+	self._animToken = (self._animToken or 0) + 1
+	local token = self._animToken
+
+	self.Root.GroupTransparency = 1
+	self._animScale = 0.96
+	self:_applyScale()
+
+	Tween.play(self.Root, { GroupTransparency = 0 }, Tween.Info.Smooth)
+	Tween.number(0.96, 1, 0.32, function(value)
+		if self.Destroyed or self._animToken ~= token then
+			return
+		end
+		self._animScale = value
+		self:_applyScale()
+	end, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+	self:_playLogoIntro()
+	self:_playPetalBurst()
+end
+
+function Window:Close(animate)
+	if self.Destroyed or not self.Visible then
+		return
+	end
+
+	self.Visible = false
+
+	-- A hidden, still-focused search box would swallow the toggle keybind.
+	if self.SearchBox and self.SearchBox:IsFocused() then
+		self.SearchBox:ReleaseFocus()
+	end
+
+	local popup = self.Library:GetActivePopup()
+	if popup then
+		popup:Close()
+	end
+
+	self._animToken = (self._animToken or 0) + 1
+	local token = self._animToken
+
+	if animate == false then
+		self.Root.Visible = false
+		self.Root.GroupTransparency = 0
+		self._animScale = 1
+		self:_applyScale()
+		return
+	end
+
+	Tween.play(self.Root, { GroupTransparency = 1 }, Tween.Info.Fast)
+	Tween.number(1, 0.96, 0.18, function(value)
+		if self.Destroyed or self._animToken ~= token then
+			return
+		end
+		self._animScale = value
+		self:_applyScale()
+	end)
+
+	task.delay(0.22, function()
+		if self.Destroyed or self.Visible or self._animToken ~= token then
+			return
+		end
+		self.Root.Visible = false
+		self.Root.GroupTransparency = 0
+		self._animScale = 1
+		self:_applyScale()
+	end)
+end
+
+function Window:Toggle()
+	if self.Visible then
+		self:Close()
+	else
+		self:Open()
+	end
+end
+
+function Window:_playLogoIntro()
+	if not self.Logo then
+		return
+	end
+
+	self.Logo.Rotation = -32
+	self.Logo.GroupTransparency = 1
+
+	Tween.play(self.Logo, {
+		Rotation = 0,
+		GroupTransparency = 0,
+	}, Tween.Info.Glide)
+end
+
+function Window:_playPetalBurst()
+	local palette = self.Library.Palette
+	local colors = { palette.Primary, palette.Accent, palette.Primary }
+
+	for index = 1, 10 do
+		local color = colors[(index % #colors) + 1]
+		local petal = Logo.Petal(color, 6 + math.random() * 4)
+		petal.Parent = self.Root
+		petal.Position = UDim2.fromOffset(26, 22)
+		petal.Rotation = math.random(0, 360)
+
+		local angle = (index / 10) * math.pi * 2 + math.random() * 0.35
+		local distance = 40 + math.random() * 55
+		local targetX = 26 + math.cos(angle) * distance
+		local targetY = 22 + math.sin(angle) * distance
+
+		Tween.play(petal, {
+			Position = UDim2.fromOffset(targetX, targetY),
+			Rotation = petal.Rotation + math.random(-160, 160),
+			GroupTransparency = 1,
+			Size = UDim2.fromOffset(2, 3),
+		}, Tween.Info.Glide)
+
+		task.delay(0.5, function()
+			if petal and petal.Parent then
+				petal:Destroy()
+			end
+		end)
+	end
+end
+
+function Window:_updateThemeDots()
+	if not self._themeDots then
+		return
+	end
+
+	local active = self.Library.ThemeManager.Name
+
+	for name, dot in pairs(self._themeDots) do
+		local isActive = name == active
+		Tween.play(dot.Button, {
+			Size = UDim2.fromOffset(isActive and 13 or 10, isActive and 13 or 10),
+			BackgroundTransparency = isActive and 0 or 0.35,
+		}, Tween.Info.Fast)
+		dot.Stroke.Transparency = isActive and 0.15 or 1
+	end
+end
+
+function Window:Destroy()
+	if self.Destroyed then
+		return
+	end
+
+	self.Destroyed = true
+	self.Visible = false
+
+	local popup = self.Library:GetActivePopup()
+	if popup then
+		popup:Close()
+	end
+
+	self.Library.Windows[self] = nil
+	if self.Library.PrimaryWindow == self then
+		self.Library.PrimaryWindow = nil
+	end
+
+	if self.SearchBox and self.SearchBox:IsFocused() then
+		self.SearchBox:ReleaseFocus()
+	end
+
+	-- Snapshot: each tab removes itself from self.Tabs.
+	local tabs = table.clone(self.Tabs)
+	for _, tab in ipairs(tabs) do
+		tab:Destroy()
+	end
+	table.clear(self.Tabs)
+	table.clear(self.SearchEntries)
+
+	for _, connection in ipairs(self._connections) do
+		connection:Disconnect()
+	end
+	table.clear(self._connections)
+
+	self.Root:Destroy()
+end
+
+return Window
