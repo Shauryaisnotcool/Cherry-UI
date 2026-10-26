@@ -170,9 +170,12 @@ function Config:Serialize()
 end
 
 function Config:Apply(data)
-	if type(data) ~= "table" then
+	if self.Destroyed or type(data) ~= "table" then
 		return false
 	end
+
+	-- Lazy tabs must exist before their controls can receive saved values.
+	self.Library:_buildAllTabs()
 
 	if type(data.theme) == "string" and self.Library.Themes[data.theme] then
 		self.Library:SetTheme(data.theme)
@@ -227,8 +230,10 @@ function Config:Save()
 		return false
 	end
 
+	-- Include controls in tabs that have never been opened.
+	self.Library:_buildAllTabs()
+
 	local data = self:Serialize()
-	self._dirty = false
 	self.Memory = data
 
 	local success = false
@@ -238,6 +243,7 @@ function Config:Save()
 		local writefile = executorFunction("writefile")
 		if not writefile then
 			warn("[CherryUI] writefile is unavailable, keeping the config in memory instead.")
+			self._dirty = false
 			return true
 		end
 
@@ -275,6 +281,10 @@ function Config:Save()
 	else
 		-- Memory mode: `self.Memory` is the saved state.
 		success = true
+	end
+
+	if success then
+		self._dirty = false
 	end
 
 	return success
@@ -340,6 +350,12 @@ function Config:Load()
 end
 
 function Config:Reset()
+	if self.Destroyed then
+		return false
+	end
+
+	self.Library:_buildAllTabs()
+
 	for _, component in ipairs(self.Components) do
 		if component.Default ~= nil then
 			local defaultValue = component.Default

@@ -116,7 +116,8 @@ function Keybind:BeginCapture()
 			return
 		end
 
-		if input.KeyCode ~= Enum.KeyCode.Unknown then
+		-- Non-keyboard input reports KeyCode.None; mouse buttons are captured below.
+		if input.KeyCode ~= Enum.KeyCode.None then
 			self:SetValue(input.KeyCode)
 			self:EndCapture()
 		elseif input.UserInputType == Enum.UserInputType.MouseButton1

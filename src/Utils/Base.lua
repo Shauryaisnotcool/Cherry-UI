@@ -236,6 +236,10 @@ function Base:Destroy()
 	self.Changed:Destroy()
 	self.Holder:Destroy()
 
+	if self.Section and not self.Section.Destroyed then
+		self.Section:UpdateVisibility()
+	end
+
 	self.Value = nil
 	self.SearchEntry = nil
 end

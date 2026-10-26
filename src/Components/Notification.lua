@@ -21,8 +21,9 @@ local MAX_VISIBLE = 4
 function Notification.new(library)
 	local self = setmetatable({}, Notification)
 
-	self.Library = library		self.Entries = {}
-		self._byId = {}
+	self.Library = library
+	self.Entries = {}
+	self._byId = {}
 	self._widgets = {}
 	self._nextId = 0
 	self.MaxVisible = MAX_VISIBLE
@@ -123,6 +124,7 @@ function Notification:_createCard()
 		Position = UDim2.fromOffset(5, 5),
 		BackgroundTransparency = 1,
 		Image = "",
+		ScaleType = Enum.ScaleType.Fit,
 		Visible = false,
 		Parent = iconHolder,
 	})
@@ -263,7 +265,7 @@ function Notification:Show(config)
 
 	config = config or {}
 
-	local duration = tonumber(config.Duration) or 5
+	local duration = math.max(tonumber(config.Duration) or 5, 0.1)
 	local wrapper = self.Pool:Get(self.Holder)
 	local widgets = self._widgets[wrapper]
 

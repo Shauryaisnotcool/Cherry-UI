@@ -71,7 +71,7 @@ function TextBox.new(library, section, config)
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Center,
-		ClearTextOnFocus = config.ClearTextOnFocus ~= false,
+		ClearTextOnFocus = config.ClearTextOnFocus == true,
 		ZIndex = 4,
 		Parent = self.Box,
 	})

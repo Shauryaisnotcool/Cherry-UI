@@ -28,6 +28,7 @@ function Section.new(library, tab, config)
 	self.Tab = tab
 	self.Name = tostring(config.Name or "Section")
 	self.Components = {}
+	self.StaticCount = 0
 	self.Destroyed = false
 	self._order = 0
 
@@ -99,6 +100,7 @@ end
 
 function Section:_add(component)
 	table.insert(self.Components, component)
+	self:UpdateVisibility()
 	return component
 end
 
@@ -147,11 +149,13 @@ function Section:AddLabel(text, config)
 		Parent = self.Body,
 	})
 	self.Library:Styled(label, "SubText", "TextColor3")
+	self.StaticCount += 1
+	self:UpdateVisibility()
 
 	return label
 end
 
-function Section:UpdateVisibility()
+function Section:UpdateVisibility(filtering)
 	if self.Destroyed then
 		return false
 	end
@@ -163,7 +167,9 @@ function Section:UpdateVisibility()
 		end
 	end
 
+	-- Label-only sections (notes, descriptions) have no controls to count.
 	local hasVisible = visibleCount > 0
+		or (not filtering and #self.Components == 0 and self.StaticCount > 0)
 	self.Frame.Visible = hasVisible
 
 	return hasVisible
@@ -191,6 +197,10 @@ function Section:Destroy()
 	end
 
 	self.Frame:Destroy()
+
+	if self.Tab and not self.Tab.Destroyed then
+		self.Tab:UpdateVisibility()
+	end
 end
 
 return Section

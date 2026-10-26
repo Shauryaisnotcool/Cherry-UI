@@ -32,12 +32,12 @@ function ESPPreview.new(library, parent, config)
 	local self = setmetatable({}, ESPPreview)
 
 	self.Library = library
-	self.Name = config.Name or "ESP Preview"
+	self.Name = tostring(config.Name or "ESP Preview")
 	self.Height = config.Height or 320
 	self.Color = typeof(config.Color) == "Color3" and config.Color or library.Palette.Primary
 	self.Enabled = { Highlight = true, Box = true, Tracer = true, Name = true }
 	self.Target = {
-		Name = config.TargetName or "Cherry",
+		Name = tostring(config.TargetName or "Cherry"),
 		Health = 100,
 		MaxHealth = 100,
 		Distance = 42,
@@ -188,24 +188,25 @@ function ESPPreview.new(library, parent, config)
 
 	for index = 1, 3 do
 		local offset = index * 0.25
-		Create.new("Frame", {
+		local vertical = Create.new("Frame", {
 			Name = "GridV",
 			Position = UDim2.fromScale(offset, 0),
 			Size = UDim2.new(0, 1, 1, 0),
-			BackgroundColor3 = palette.Outline,
 			BackgroundTransparency = 0.65,
 			ZIndex = 1,
 			Parent = self.Stage,
 		})
-		Create.new("Frame", {
+		library:Styled(vertical, "Outline", "BackgroundColor3")
+
+		local horizontal = Create.new("Frame", {
 			Name = "GridH",
 			Position = UDim2.fromScale(0, offset),
 			Size = UDim2.new(1, 0, 0, 1),
-			BackgroundColor3 = palette.Outline,
 			BackgroundTransparency = 0.65,
 			ZIndex = 1,
 			Parent = self.Stage,
 		})
+		library:Styled(horizontal, "Outline", "BackgroundColor3")
 	end
 
 	-- Tracer.
@@ -390,6 +391,7 @@ function ESPPreview.new(library, parent, config)
 		Parent = self.NameTag,
 	})
 	Create.corner(healthTrack, 1)
+	library:Styled(healthTrack, "Outline", "BackgroundColor3")
 
 	self.HealthFill = Create.new("Frame", {
 		Name = "HealthFill",
@@ -487,7 +489,7 @@ function ESPPreview:_renderTarget()
 	local target = self.Target
 	local fraction = Util.clamp(target.Health / math.max(target.MaxHealth, 1), 0, 1)
 
-	self.NameLabel.Text = target.Name
+	self.NameLabel.Text = tostring(target.Name)
 	self.HealthFill.Size = UDim2.fromScale(fraction, 1)
 	self.HealthFill.BackgroundColor3 = fraction > 0.6 and palette.Success
 		or fraction > 0.3 and palette.Warning
@@ -508,8 +510,12 @@ function ESPPreview:_update()
 		return
 	end
 
-	-- Pause the animation while the tab or the window is hidden.
-	local content = self.Frame and self.Frame.Parent and self.Frame.Parent.Parent
+	-- Pause the animation while the tab, the embed is filtered, or the window is hidden.
+	if not self.Frame or not self.Frame.Visible then
+		return
+	end
+
+	local content = self.Frame.Parent and self.Frame.Parent.Parent
 	if content and not content.Visible then
 		return
 	end

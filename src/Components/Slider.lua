@@ -53,7 +53,7 @@ function Slider.new(library, section, config)
 		end
 	end
 
-	self.Value = Util.clamp(tonumber(config.Default) or minimum, minimum, maximum)
+	self.Value = self:_clean(tonumber(config.Default) or minimum)
 
 	self.Hit = Create.textButton({
 		Name = "Hit",
@@ -187,33 +187,10 @@ function Slider:_wireEvents()
 		end
 
 		self.Dragging = true
+		self:_beginDrag()
 		local value = self:_valueFromPosition(input.Position.X)
 		if value then
 			self:SetValue(value)
-		end
-	end))
-
-	self:_track(UserInputService.InputChanged:Connect(function(input)
-		if not self.Dragging then
-			return
-		end
-		if input.UserInputType ~= Enum.UserInputType.MouseMovement
-			and input.UserInputType ~= Enum.UserInputType.Touch
-		then
-			return
-		end
-
-		local value = self:_valueFromPosition(input.Position.X)
-		if value then
-			self:SetValue(value)
-		end
-	end))
-
-	self:_track(UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch
-		then
-			self.Dragging = false
 		end
 	end))
 
@@ -241,6 +218,51 @@ function Slider:_wireEvents()
 	end)
 end
 
+-- Drag listeners only exist while a drag is in progress, so idle sliders cost nothing.
+function Slider:_beginDrag()
+	if self._dragConnection then
+		return
+	end
+
+	self._dragConnection = UserInputService.InputChanged:Connect(function(input)
+		if not self.Dragging then
+			return
+		end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement
+			and input.UserInputType ~= Enum.UserInputType.Touch
+		then
+			return
+		end
+
+		local value = self:_valueFromPosition(input.Position.X)
+		if value then
+			self:SetValue(value)
+		end
+	end)
+
+	self._endConnection = UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+			then
+			self:_endDrag()
+		end
+	end)
+end
+
+function Slider:_endDrag()
+	self.Dragging = false
+
+	if self._dragConnection then
+		self._dragConnection:Disconnect()
+		self._dragConnection = nil
+	end
+
+	if self._endConnection then
+		self._endConnection:Disconnect()
+		self._endConnection = nil
+	end
+end
+
 function Slider:SetValue(value, silent)
 	if self.Destroyed then
 		return
@@ -262,6 +284,7 @@ function Slider:GetValue()
 end
 
 function Slider:Destroy()
+	self:_endDrag()
 	Base.Destroy(self)
 end
 

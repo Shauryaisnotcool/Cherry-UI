@@ -92,6 +92,10 @@ The full integration guide lives in **[setup.md](setup.md)**. It covers Rojo and
 manual installation, every component, themes, notifications, config backends,
 the ESP preview hook, player list actions and troubleshooting.
 
+Working on Cherry UI itself? **[RESUME.md](RESUME.md)** covers the development
+loop: the Rojo plugin end to end, both project files, static checks that run
+without Studio, and how to publish the repo and release the model.
+
 ## Project layout
 
 ```

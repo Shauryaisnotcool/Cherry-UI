@@ -104,7 +104,22 @@ function ColorPicker.new(library, section, config)
 		self:Open()
 	end))
 
-	self:_track(UserInputService.InputChanged:Connect(function(input)
+	self:OnThemeChanged(function()
+		self:_render()
+	end)
+
+	self:_render()
+
+	return self
+end
+
+-- Drag listeners are created on mouse-down and removed on release.
+function ColorPicker:_beginDrag()
+	if self._dragConnection then
+		return
+	end
+
+	self._dragConnection = UserInputService.InputChanged:Connect(function(input)
 		if not self.DragMode then
 			return
 		end
@@ -119,23 +134,29 @@ function ColorPicker.new(library, section, config)
 		elseif self.DragMode == "hue" then
 			self:_updateHue(input.Position)
 		end
-	end))
-
-	self:_track(UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch
-		then
-			self.DragMode = nil
-		end
-	end))
-
-	self:OnThemeChanged(function()
-		self:_render()
 	end)
 
-	self:_render()
+	self._endConnection = UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+			then
+			self:_endDrag()
+		end
+	end)
+end
 
-	return self
+function ColorPicker:_endDrag()
+	self.DragMode = nil
+
+	if self._dragConnection then
+		self._dragConnection:Disconnect()
+		self._dragConnection = nil
+	end
+
+	if self._endConnection then
+		self._endConnection:Disconnect()
+		self._endConnection = nil
+	end
 end
 
 function ColorPicker:_ensurePopup()
@@ -147,6 +168,12 @@ function ColorPicker:_ensurePopup()
 		Name = "ColorPickerPopup",
 		Width = POPUP_WIDTH,
 		Height = POPUP_HEIGHT,
+		OnClose = function()
+			self:_endDrag()
+			if self.HexBox and self.HexBox:IsFocused() then
+				self.HexBox:ReleaseFocus()
+			end
+		end,
 	})
 
 	local frame = self.Popup.Frame
@@ -267,6 +294,7 @@ function ColorPicker:_ensurePopup()
 			or input.UserInputType == Enum.UserInputType.Touch
 		then
 			self.DragMode = "sv"
+			self:_beginDrag()
 			self:_updateSV(input.Position)
 		end
 	end)
@@ -276,6 +304,7 @@ function ColorPicker:_ensurePopup()
 			or input.UserInputType == Enum.UserInputType.Touch
 		then
 			self.DragMode = "hue"
+			self:_beginDrag()
 			self:_updateHue(input.Position)
 		end
 	end)
@@ -395,6 +424,8 @@ function ColorPicker:Destroy()
 	if self.Destroyed then
 		return
 	end
+
+	self:_endDrag()
 
 	if self.Popup then
 		self.Popup:Destroy()

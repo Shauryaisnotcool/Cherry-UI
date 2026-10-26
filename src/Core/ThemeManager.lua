@@ -136,9 +136,12 @@ function ThemeManager:Bind(instance, property, token)
 
 	table.insert(self.Bindings, binding)
 
-	local connection = instance.Destroying:Connect(function()
+	local connection
+	connection = instance.Destroying:Connect(function()
 		self:Unbind(binding)
-		connection:Disconnect()
+		if connection then
+			connection:Disconnect()
+		end
 	end)
 	binding.Connection = connection
 
@@ -182,9 +185,12 @@ function ThemeManager:BindCustom(apply, owner)
 	apply(self.Palette)
 
 	if owner then
-		local connection = owner.Destroying:Connect(function()
+		local connection
+		connection = owner.Destroying:Connect(function()
 			self:Unbind(binding)
-			connection:Disconnect()
+			if connection then
+				connection:Disconnect()
+			end
 		end)
 		binding.Connection = connection
 	end

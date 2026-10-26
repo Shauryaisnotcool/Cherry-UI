@@ -3,9 +3,7 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "$className": "ReplicatedStorage",
       "CherryUI": {
-        "$className": "Folder",
         "$path": "src"
       }
     }

@@ -36,10 +36,33 @@ function Window.new(library, config)
 	self.Config = config
 	self.Title = tostring(config.Title or "Cherry UI")
 	self.Subtitle = tostring(config.Subtitle or ("v" .. tostring(library.Version)))
-	self.Width = config.Width or 640
-	self.Height = config.Height or 460
-	self.MinWidth = config.MinWidth or 480
-	self.MinHeight = config.MinHeight or 300
+	self.MinWidth = tonumber(config.MinWidth) or 480
+	self.MinHeight = tonumber(config.MinHeight) or 300
+
+	-- Accept both explicit Width/Height and the documented `Size = UDim2` form.
+	local width = tonumber(config.Width)
+	local height = tonumber(config.Height)
+	local size = config.Size
+
+	if typeof(size) == "UDim2" then
+		local viewport = (library.ScreenGui and library.ScreenGui.AbsoluteSize) or Vector2.new(1280, 800)
+
+		if size.X.Scale > 0 then
+			width = math.floor(viewport.X * size.X.Scale)
+		end
+		if size.Y.Scale > 0 then
+			height = math.floor(viewport.Y * size.Y.Scale)
+		end
+		if size.X.Offset > 0 then
+			width = size.X.Offset
+		end
+		if size.Y.Offset > 0 then
+			height = size.Y.Offset
+		end
+	end
+
+	self.Width = math.max(width or 640, self.MinWidth)
+	self.Height = math.max(height or 460, self.MinHeight)
 	self.Tabs = {}
 	self.ActiveTab = nil
 	self.Visible = false
@@ -527,6 +550,7 @@ function Window:_startResize(input)
 	self._resizing = true
 	self._resizeStartMouse = Vector2.new(input.Position.X, input.Position.Y)
 	self._resizeStartSize = Vector2.new(self.Root.AbsoluteSize.X, self.Root.AbsoluteSize.Y)
+	self._resizeStartTopLeft = self.Root.AbsolutePosition - self.Library.Overlay.AbsolutePosition
 end
 
 function Window:_onInputChanged(input)
@@ -560,20 +584,27 @@ function Window:_onInputChanged(input)
 			factor = 1
 		end
 
-		local maxWidth = (viewport.X - 32) / factor
-		local maxHeight = (viewport.Y - 32) / factor
-		local width = math.clamp(
+		local topLeft = self._resizeStartTopLeft or Vector2.new(0, 0)
+		local maxWidth = math.max(self.MinWidth, (viewport.X - topLeft.X - 12) / factor)
+		local maxHeight = math.max(self.MinHeight, (viewport.Y - topLeft.Y - 12) / factor)
+		local width = math.floor(math.clamp(
 			(self._resizeStartSize.X + delta.X) / factor,
 			self.MinWidth,
-			math.max(self.MinWidth, maxWidth)
-		)
-		local height = math.clamp(
+			maxWidth
+		))
+		local height = math.floor(math.clamp(
 			(self._resizeStartSize.Y + delta.Y) / factor,
 			self.MinHeight,
-			math.max(self.MinHeight, maxHeight)
-		)
+			maxHeight
+		))
 
-		self.Root.Size = UDim2.fromOffset(math.floor(width), math.floor(height))
+		self.Root.Size = UDim2.fromOffset(width, height)
+
+		-- AnchorPoint is centered, so compensate to keep the top-left pinned while resizing.
+		self.Root.Position = UDim2.fromOffset(
+			topLeft.X + width * factor * 0.5,
+			topLeft.Y + height * factor * 0.5
+		)
 	end
 end
 

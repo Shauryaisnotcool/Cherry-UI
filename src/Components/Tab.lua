@@ -125,7 +125,7 @@ function Tab:UpdateVisibility(filtering)
 
 	local visibleSections = 0
 	for _, section in ipairs(self.Sections) do
-		if section:UpdateVisibility() then
+		if section:UpdateVisibility(filtering) then
 			visibleSections += 1
 		end
 	end
@@ -169,6 +169,12 @@ function Tab:Destroy()
 	table.clear(self.Embeds)
 
 	self.Content:Destroy()
+
+	-- The tab button lives in the window's tab bar, not in Content.
+	if self.Button then
+		self.Button:Destroy()
+		self.Button = nil
+	end
 
 	if self.Window.ActiveTab == self then
 		self.Window.ActiveTab = nil

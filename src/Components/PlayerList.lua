@@ -35,8 +35,13 @@ function PlayerList.new(library, parent, config)
 	self._connections = {}
 	self.Actions = {
 		teleport = config.OnTeleport,
-		spectate = config.OnSpectate,
-		copy = config.OnCopy,
+		-- Spectate and copy work out of the box; teleport needs server authority.
+		spectate = config.OnSpectate or function(player)
+			self:_spectate(player)
+		end,
+		copy = config.OnCopy or function(player)
+			self:_copy(player)
+		end,
 	}
 
 	local palette = library.Palette
@@ -158,10 +163,22 @@ function PlayerList.new(library, parent, config)
 	end))
 
 	self._task = library.Scheduler:Every(1, function()
-		local content = self.Frame and self.Frame.Parent and self.Frame.Parent.Parent
-		if content and content.Visible then
-			self:Refresh()
+		if not self.Frame or not self.Frame.Visible then
+			return
 		end
+
+		local content = self.Frame.Parent and self.Frame.Parent.Parent
+		if not content or not content.Visible then
+			return
+		end
+
+		local main = content.Parent
+		local root = main and main.Parent and main.Parent.Parent
+		if root and root.Visible == false then
+			return
+		end
+
+		self:Refresh()
 	end)
 
 	self:Refresh()
@@ -181,6 +198,7 @@ function PlayerList:_createRow()
 		Parent = nil,
 	})
 	Create.corner(row, 6)
+	library:Styled(row, "SurfaceHigh", "BackgroundColor3")
 
 	local avatar = Create.new("ImageLabel", {
 		Name = "Avatar",
@@ -193,6 +211,7 @@ function PlayerList:_createRow()
 		Parent = row,
 	})
 	Create.corner(avatar, UDim.new(1, 0))
+	library:Styled(avatar, "Surface", "BackgroundColor3")
 
 	local name = Create.label({
 		Name = "PlayerName",
@@ -277,7 +296,11 @@ function PlayerList:_renderRow(row, player)
 	local statusLabel = row:FindFirstChild("Status")
 
 	if avatar then
-		avatar.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=48&h=48", player.UserId)
+		local url = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=48&h=48", player.UserId)
+		-- Avoid re-requesting the same thumbnail every refresh tick.
+		if avatar.Image ~= url then
+			avatar.Image = url
+		end
 	end
 
 	local localPlayer = Players.LocalPlayer
@@ -334,12 +357,20 @@ function PlayerList:Refresh()
 	local localPlayer = Players.LocalPlayer
 
 	table.sort(players, function(a, b)
+		if a == b then
+			return false
+		end
 		if a == localPlayer then
 			return true
 		elseif b == localPlayer then
 			return false
 		end
-		return string.lower(a.Name) < string.lower(b.Name)
+
+		local aName, bName = string.lower(a.Name), string.lower(b.Name)
+		if aName == bName then
+			return a.UserId < b.UserId
+		end
+		return aName < bName
 	end)
 
 	local filter = string.lower(self.Filter)

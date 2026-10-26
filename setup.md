@@ -31,9 +31,14 @@ Cherry UI is a **client-side** library. All UI code must run in a LocalScript
 
 3. In Studio, open the Rojo plugin, connect to `localhost:34872`, and sync.
 
-The included [`default.project.json`](default.project.json) maps `src/` to
-`ReplicatedStorage.CherryUI` as a single ModuleScript with `Core`,
-`Components`, `Themes` and `Utils` children.
+The included [`default.project.json`](default.project.json) is a `DataModel`
+place project (so it can be synced as a place, not just a model) and maps
+`src/` to `ReplicatedStorage.CherryUI` as a single ModuleScript with `Core`,
+`Components`, `Themes` and `Utils` children. Restart `rojo serve` after
+updating the file, then reconnect or resync from the Studio plugin.
+
+Installing the plugin, choosing the right project file and fixing common sync
+errors is covered step by step in [RESUME.md](RESUME.md) §2–§3.
 
 ### Option B — Manual (no plugins)
 
@@ -76,6 +81,19 @@ The included [`default.project.json`](default.project.json) maps `src/` to
 
 Download `CherryUI.rbxm` from the GitHub releases page and drop it into
 `ReplicatedStorage`. The model contains the same ModuleScript tree.
+
+To build it yourself from source: `rojo build model.project.json -o CherryUI.rbxm`
+(see [RESUME.md](RESUME.md) §5.6).
+
+---
+
+### Running the demo
+
+[`src/Example.lua`](src/Example.lua) is a full FPS menu, but it syncs as a
+ModuleScript and will not run by itself. Paste its contents into a
+**LocalScript** under `StarterPlayer/StarterPlayerScripts`, then press Play.
+It expects the library at `ReplicatedStorage.CherryUI` and looks for an
+optional `TeleportRequest` RemoteEvent.
 
 ---
 
@@ -324,8 +342,9 @@ list:SetAction("teleport", function(player)
 end)
 ```
 
-Spectate and copy work out of the box; teleport needs a server-side handler
-because clients cannot move other characters.
+Spectate works out of the box; teleport needs a server-side handler because
+clients cannot move other characters. Copy uses the executor's `setclipboard`
+when available; in vanilla Roblox it shows the name for manual copying.
 
 ### Config saving
 
@@ -397,6 +416,7 @@ reappear by accident.
 | Player list teleport does nothing | Provide a handler: `list:SetAction("teleport", fn)`. |
 | ESP preview does not animate | The library scheduler is destroyed, or `preview:Destroy()` was called. |
 | Memory grows after closing tabs | Call `Window:Destroy()` / `CherryUI:Destroy()` when you are done; components disconnect their own connections. |
+| Rojo will not sync / `Cannot sync a model as a place` | You are serving a model project. Serve `default.project.json` and reconnect — see [RESUME.md](RESUME.md) §3. |
 
 ### Mobile
 

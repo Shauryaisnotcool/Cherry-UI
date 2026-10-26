@@ -176,7 +176,7 @@ playerList:SetAction("teleport", function(player)
 end)
 
 playersTab:AddSection("Notes"):AddLabel(
-	"Teleport requires a server-side handler. Spectate and copy work on the client."
+	"Teleport needs a server-side handler. Copy also needs executor clipboard access."
 )
 
 --------------------------------------------------------------------------
@@ -185,7 +185,7 @@ playersTab:AddSection("Notes"):AddLabel(
 
 Window:AddTab("Settings", "⚙", function(tab)
 	local appearance = tab:AddSection("Appearance")
-	appearance:AddDropdown({
+	local themeDropdown = appearance:AddDropdown({
 		Name = "Theme",
 		Options = CherryUI:GetThemeNames(),
 		Default = CherryUI.ThemeManager.Name,
@@ -193,13 +193,22 @@ Window:AddTab("Settings", "⚙", function(tab)
 			CherryUI:SetTheme(theme)
 		end,
 	})
-	appearance:AddKeybind({
+	-- Keep the dropdown in sync with the theme dots / loaded config.
+	CherryUI.ThemeManager.Changed:Connect(function(theme)
+		themeDropdown:SetValue(theme, true)
+	end)
+
+	local menuKey = appearance:AddKeybind({
 		Name = "Menu Key",
 		Default = CherryUI.ToggleKey,
 		Callback = function(key)
 			CherryUI:SetToggleKey(key)
 		end,
 	})
+	-- Keep the pill in sync when the key is changed elsewhere (e.g. config load).
+	CherryUI:OnToggleKeyChanged(function(key)
+		menuKey:SetValue(key, true)
+	end)
 
 	local notifications = tab:AddSection("Notifications")
 	notifications:AddButton({
