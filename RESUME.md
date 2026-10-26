@@ -228,11 +228,19 @@ done; echo "compile fail=$fail"       # expect: compile fail=0
 
 # 2. Build smoke test — catches project-file and tree errors
 rojo build default.project.json -o /tmp/CherryUI-Check.rbxlx
-# expect "31 ModuleScript" + "4 Folder" instances in the output
+# expect "33 ModuleScript" + "4 Folder" instances in the output
 
-# 3. For editor/IDE intelligence (Roblox types, not just Lua)
+# 3. Rebuild the single-file bundle used by executors
+python3 tools/bundle.py                          # writes dist/CherryUI.lua
+
+# 4. For editor/IDE intelligence (Roblox types, not just Lua)
 rojo sourcemap default.project.json -o sourcemap.json
 ```
+
+The bundle is generated, never hand-edited: change `src/`, run
+`python3 tools/bundle.py`, and commit the regenerated `dist/CherryUI.lua`. It
+rewrites every `require(script…)` into an in-memory registry, so a stale bundle
+is the usual reason an executor build behaves differently from Studio.
 
 `luau-analyze` also runs, but on its own it flags `game`, `Instance` and
 `EnumItem` as unknown, because those come from Roblox. Point
@@ -329,18 +337,21 @@ built model, not the source:
 ```bash
 mkdir -p build
 rojo build model.project.json -o build/CherryUI.rbxm
+python3 tools/bundle.py                          # refresh dist/CherryUI.lua
 
 git tag -a v1.0.0 -m "Cherry UI v1.0.0"
 git push origin v1.0.0
 
 # with gh:
-gh release create v1.0.0 build/CherryUI.rbxm \
+gh release create v1.0.0 build/CherryUI.rbxm dist/CherryUI.lua \
   --title "Cherry UI v1.0.0" \
-  --notes "First release: window, tabs, sections, eight controls, five themes, live ESP preview, player list, config saving, search, dependency boxes."
+  --notes "First release: window, tabs, sections, eight controls, five themes, live ESP preview, player list, config saving, search, dependency boxes, cherry cursor."
 ```
 
-Without `gh`: push the tag, then Repo → **Releases → Draft a new release** → choose
-`v1.0.0` → drag `build/CherryUI.rbxm` into the assets box → Publish.
+Ship both assets: `CherryUI.rbxm` for Studio users and `dist/CherryUI.lua` for
+executors / `loadstring`. Without `gh`: push the tag, then Repo →
+**Releases → Draft a new release** → choose `v1.0.0` → drag both files into the
+assets box → Publish.
 
 Build outputs are gitignored on purpose: the `.rbxm` belongs in the release, not
 in a commit.
@@ -368,4 +379,6 @@ Never commit `.freebuff/`, Studio autosaves, or generated `build/` output.
 | Install manually / without plugins | [setup.md](setup.md) §2 Option B |
 | Every component's API | [setup.md](setup.md) §7 cheat sheet |
 | Sync with Rojo, fix Rojo errors | this file §2–§3 |
+| Run Cherry UI in an executor | [setup.md](setup.md) §2 Option D |
+| Understand the cherry cursor | [setup.md](setup.md) §3 “Cursor” |
 | Publish to GitHub | this file §5 |

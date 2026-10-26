@@ -9,6 +9,7 @@
 
 local Create = require(script.Parent.Create)
 local Tween = require(script.Parent.Tween)
+local Fade = require(script.Parent.Fade)
 
 local Popup = {}
 Popup.__index = Popup
@@ -93,10 +94,9 @@ function Popup:Open(anchor)
 	y = math.clamp(y, 8, math.max(8, overlaySize.Y - height - 8))
 
 	self.Frame.Position = UDim2.fromOffset(x, y)
-	self.Frame.GroupTransparency = 1
 	self.Scale.Scale = 0.96
 
-	Tween.play(self.Frame, { GroupTransparency = 0 }, Tween.Info.Snap)
+	Fade.play(self.Frame, 1, 0, 0.12)
 	Tween.play(self.Scale, { Scale = 1 }, Tween.Info.Fast)
 end
 
@@ -113,7 +113,7 @@ function Popup:Close()
 
 	self.Catcher.Visible = false
 
-	Tween.play(self.Frame, { GroupTransparency = 1 }, Tween.Info.Snap)
+	Fade.play(self.Frame, 0, 1, 0.1)
 
 	task.delay(0.1, function()
 		if not self.IsOpen and not self.Destroyed then

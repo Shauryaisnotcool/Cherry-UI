@@ -23,6 +23,7 @@ local Scheduler = require(script.Utils.Scheduler)
 local Util = require(script.Utils.Util)
 local ConfigManager = require(script.Utils.Config)
 local ThemeManager = require(script.Core.ThemeManager)
+local Cursor = require(script.Core.Cursor)
 local Notification = require(script.Components.Notification)
 local Window = require(script.Components.Window)
 
@@ -54,8 +55,13 @@ function Library.new()
 	self.ScreenGui = nil
 	self.Overlay = nil
 	self.Notifier = nil
+	self.Cursor = nil
 	self.PrimaryWindow = nil
 	self.Destroyed = false
+
+	-- The cherry pointer ships on by default: loading the library replaces the
+	-- Roblox cursor immediately, even before the first window is created.
+	self._cursorMode = "always"
 
 	self.ThemeManager = ThemeManager.new(Themes, DEFAULT_THEME)
 	self.Palette = self.ThemeManager.Palette
@@ -63,6 +69,15 @@ function Library.new()
 	self.Config = ConfigManager.new(self)
 
 	self:_bindInput()
+
+	-- Build the ScreenGui (and with it the cherry cursor) as soon as the module
+	-- runs. Deferred so `require` never yields, and client-only so requiring the
+	-- library from server code or Studio's edit mode stays silent.
+	task.defer(function()
+		if not self.Destroyed and RunService:IsClient() then
+			self:_ensureScreen()
+		end
+	end)
 
 	return self
 end
@@ -93,35 +108,71 @@ function Library:_bindInput()
 	end)
 end
 
+--[[
+	Picks where the ScreenGui should live.
+
+	Executors expose `gethui()`, which returns a container that draws above the
+	game's own interfaces; plain Roblox clients only have PlayerGui. Both are
+	client-side, so a LocalScript and an injected script take the same path.
+]]
+local function resolveGuiParent(player)
+	local getHiddenUi = gethui
+
+	if type(getHiddenUi) == "function" then
+		local ok, parent = pcall(getHiddenUi)
+		if ok and parent then
+			return parent
+		end
+	end
+
+	return player:WaitForChild("PlayerGui")
+end
+
 function Library:_ensureScreen()
 	if self.ScreenGui and self.ScreenGui.Parent then
 		return self.ScreenGui
 	end
 
 	if not RunService:IsClient() then
-		warn("[CherryUI] Cherry UI builds its interface on the client; require it from a LocalScript.")
+		warn("[CherryUI] Cherry UI builds its interface on the client; require it from a LocalScript (or run it in Studio with Play, not Run).")
 		return nil
 	end
 
+	-- Never block forever: in Studio's "Run" mode (F8) there is no LocalPlayer and
+	-- an unbounded wait would silently swallow the whole script.
 	local player = Players.LocalPlayer
-	if not player then
-		Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+	local attempts = 0
+	while not player and attempts < 50 do
+		task.wait(0.1)
 		player = Players.LocalPlayer
+		attempts += 1
 	end
 
 	if not player then
-		warn("[CherryUI] Cherry UI must be created on the client (no LocalPlayer found).")
+		warn("[CherryUI] No LocalPlayer: open the place with Play (F5), not Run (F8), or move the script into StarterPlayerScripts.")
 		return nil
 	end
 
-	local screenGui = Create.new("ScreenGui", {
+	local guiProps = {
 		Name = "CherryUI",
 		ResetOnSpawn = false,
 		IgnoreGuiInset = false,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 		DisplayOrder = 999,
-		Parent = player:WaitForChild("PlayerGui"),
-	})
+	}
+
+	-- Executors sometimes expose a `gethui()` that refuses the parent; falling
+	-- back to PlayerGui keeps the library usable instead of erroring there.
+	local function buildGui(target)
+		local props = table.clone(guiProps)
+		props.Parent = target
+		return Create.new("ScreenGui", props)
+	end
+
+	local ok, screenGui = pcall(buildGui, resolveGuiParent(player))
+	if not ok or not screenGui or not screenGui.Parent then
+		screenGui = buildGui(player:WaitForChild("PlayerGui"))
+	end
 
 	-- Respect device safe areas / the topbar on modern clients.
 	pcall(function()
@@ -138,7 +189,12 @@ function Library:_ensureScreen()
 		Parent = screenGui,
 	})
 
+	self.Cursor = Cursor.new(self)
 	self.Notifier = Notification.new(self)
+
+	if self._cursorMode then
+		self.Cursor:SetMode(self._cursorMode)
+	end
 
 	return screenGui
 end
@@ -159,11 +215,23 @@ function Library:CreateWindow(config)
 		return nil
 	end
 
+	if config.Cursor ~= nil then
+		self:SetCursorMode(config.Cursor)
+	else
+		self:SetCursorMode(self._cursorMode or "always")
+	end
+
 	local window = Window.new(self, config)
 	self.Windows[window] = true
 
 	if not self.PrimaryWindow then
 		self.PrimaryWindow = window
+
+		-- The window opens inside its constructor, before it is the primary one,
+		-- so the "menu" cursor needs one more nudge to appear.
+		if self.Cursor then
+			self.Cursor:Refresh()
+		end
 	end
 
 	return window
@@ -229,6 +297,39 @@ function Library:ToggleUI()
 	if window and not window.Destroyed then
 		window:Toggle()
 	end
+end
+
+--[[
+	Cursor control: "always" (default) replaces the Roblox pointer as soon as the
+	library loads, "menu" draws the cherry only while a Cherry UI window is open,
+	and "off" leaves the Roblox cursor untouched.
+]]
+function Library:SetCursorMode(mode)
+	if self.Cursor then
+		return self.Cursor:SetMode(mode)
+	end
+
+	if not (mode == "always" or mode == "menu" or mode == "off") then
+		warn("[CherryUI] Unknown cursor mode: " .. tostring(mode))
+		return false
+	end
+
+	self._cursorMode = mode
+	return true
+end
+
+function Library:GetCursorMode()
+	if self.Cursor then
+		return self.Cursor:GetMode()
+	end
+
+	return self._cursorMode or "always"
+end
+
+-- Puts Roblox's own pointer back without tearing the interface down. Handy when
+-- another script (or a hard script stop) needs the system cursor again.
+function Library:ResetCursor()
+	return self:SetCursorMode("off")
 end
 
 function Library:SetActivePopup(popup)
@@ -305,6 +406,11 @@ function Library:Destroy()
 	if self.Notifier then
 		self.Notifier:Destroy()
 		self.Notifier = nil
+	end
+
+	if self.Cursor then
+		self.Cursor:Destroy()
+		self.Cursor = nil
 	end
 
 	if self._inputConnection then

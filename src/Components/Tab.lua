@@ -118,7 +118,7 @@ function Tab:Select()
 	self.Window:SelectTab(self)
 end
 
-function Tab:UpdateVisibility(filtering)
+function Tab:UpdateVisibility(filtering, query)
 	if self.Destroyed then
 		return false
 	end
@@ -130,11 +130,18 @@ function Tab:UpdateVisibility(filtering)
 		end
 	end
 
-	for _, embed in ipairs(self.Embeds) do
-		embed.Frame.Visible = not filtering
+	-- A search that names the tab ("esp", "players") keeps its embeds on screen;
+	-- otherwise an embed-only tab would dim to empty on every keystroke.
+	local nameMatch = false
+	if filtering and query and #query > 0 then
+		nameMatch = string.find(string.lower(self.Name), query, 1, true) ~= nil
 	end
 
-	local hasContent = visibleSections > 0 or (not filtering and #self.Embeds > 0)
+	for _, embed in ipairs(self.Embeds) do
+		embed.Frame.Visible = (not filtering) or nameMatch
+	end
+
+	local hasContent = visibleSections > 0 or (#self.Embeds > 0 and (not filtering or nameMatch))
 	self.HasContent = hasContent
 
 	local transparency = hasContent and 0 or 0.5

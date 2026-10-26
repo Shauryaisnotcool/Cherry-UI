@@ -9,6 +9,7 @@
 
 local Create = require(script.Parent.Parent.Utils.Create)
 local Tween = require(script.Parent.Parent.Utils.Tween)
+local Fade = require(script.Parent.Parent.Utils.Fade)
 local Pool = require(script.Parent.Parent.Utils.Pool)
 
 local Notification = {}
@@ -249,7 +250,7 @@ function Notification:_resetCard(wrapper)
 	wrapper:SetAttribute("CherryNotification", nil)
 
 	widgets.Card.Position = UDim2.new(1, 60, 0, 0)
-	widgets.Card.GroupTransparency = 1
+	Fade.set(widgets.Card, 0)
 	widgets.ProgressFill.Size = UDim2.fromScale(1, 1)
 	widgets.Title.Text = ""
 	widgets.Content.Text = ""
@@ -332,10 +333,9 @@ function Notification:Show(config)
 	table.insert(self.Entries, entry)
 
 	widgets.Card.Position = UDim2.new(1, 60, 0, 0)
-	widgets.Card.GroupTransparency = 1
+	Fade.play(widgets.Card, 1, 0, 0.36, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 	Tween.play(widgets.Card, {
 		Position = UDim2.new(1, 0, 0, 0),
-		GroupTransparency = 0,
 	}, Tween.Info.Glide)
 
 	widgets.ProgressFill.Size = UDim2.fromScale(1, 1)
@@ -384,8 +384,8 @@ function Notification:_dismiss(entry)
 	if widgets then
 		Tween.play(widgets.Card, {
 			Position = UDim2.new(1, 60, 0, 0),
-			GroupTransparency = 1,
 		}, Tween.Info.Fast)
+		Fade.play(widgets.Card, 0, 1, 0.14)
 	end
 
 	local wrapper = entry.Wrapper

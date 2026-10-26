@@ -17,6 +17,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Create = require(script.Parent.Parent.Utils.Create)
 local Tween = require(script.Parent.Parent.Utils.Tween)
+local Fade = require(script.Parent.Parent.Utils.Fade)
 local Logo = require(script.Parent.Parent.Core.Logo)
 local Tab = require(script.Parent.Tab)
 
@@ -38,6 +39,8 @@ function Window.new(library, config)
 	self.Subtitle = tostring(config.Subtitle or ("v" .. tostring(library.Version)))
 	self.MinWidth = tonumber(config.MinWidth) or 480
 	self.MinHeight = tonumber(config.MinHeight) or 300
+	self.Resizable = config.Resizable ~= false
+	self._resizeAxes = { X = true, Y = true }
 
 	-- Accept both explicit Width/Height and the documented `Size = UDim2` form.
 	local width = tonumber(config.Width)
@@ -45,7 +48,7 @@ function Window.new(library, config)
 	local size = config.Size
 
 	if typeof(size) == "UDim2" then
-		local viewport = (library.ScreenGui and library.ScreenGui.AbsoluteSize) or Vector2.new(1280, 800)
+		local viewport = self:_viewportSize()
 
 		if size.X.Scale > 0 then
 			width = math.floor(viewport.X * size.X.Scale)
@@ -79,6 +82,15 @@ function Window.new(library, config)
 	self:_bindEvents()
 	self:_updateScale()
 
+	-- The ScreenGui reports a 0x0 AbsoluteSize until its first render, so scale
+	-- once more after the frame is on screen (otherwise a small viewport can keep
+	-- the window at 100% and push it off the edges).
+	task.defer(function()
+		if not self.Destroyed then
+			self:_updateScale()
+		end
+	end)
+
 	library.Windows[self] = true
 
 	if config.StartOpen ~= false then
@@ -91,6 +103,45 @@ end
 function Window:_track(connection)
 	table.insert(self._connections, connection)
 	return connection
+end
+
+-- Viewport size with fallbacks for the first frames, when the ScreenGui has not
+-- been laid out yet and `AbsoluteSize` is still (0, 0).
+function Window:_viewportSize()
+	local screenGui = self.Library.ScreenGui
+	local size = screenGui and screenGui.AbsoluteSize
+
+	if size and size.X > 0 and size.Y > 0 then
+		return size
+	end
+
+	local camera = workspace.CurrentCamera
+	if camera and camera.ViewportSize and camera.ViewportSize.X > 0 then
+		return camera.ViewportSize
+	end
+
+	return Vector2.new(1280, 800)
+end
+
+-- Keeps the window inside the viewport, including after a resolution change.
+function Window:_fitToViewport()
+	if not self.Root then
+		return
+	end
+
+	local viewport = self:_viewportSize()
+	local factor = math.max(self._baseScale, 0.4)
+	local maxWidth = math.max(240, viewport.X / factor - 24)
+	local maxHeight = math.max(180, viewport.Y / factor - 24)
+
+	local width = math.clamp(self.Width, math.min(self.MinWidth, maxWidth), maxWidth)
+	local height = math.clamp(self.Height, math.min(self.MinHeight, maxHeight), maxHeight)
+
+	if math.floor(width) ~= self.Width or math.floor(height) ~= self.Height then
+		self.Width = math.floor(width)
+		self.Height = math.floor(height)
+		self.Root.Size = UDim2.fromOffset(self.Width, self.Height)
+	end
 end
 
 function Window:_build()
@@ -396,28 +447,54 @@ function Window:_build()
 	})
 	library:Styled(self.NoResults, "SubText", "TextColor3")
 
-	-- Resize grip.
+	-- Resize affordances: a corner grip (22x22 hit area) plus thin right/bottom
+	-- edges, so the window can be grabbed from any of the three expected spots.
 	self.ResizeGrip = Create.textButton({
 		Name = "Resize",
 		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -3, 1, -3),
-		Size = UDim2.fromOffset(16, 16),
-		ZIndex = 8,
+		Position = UDim2.new(1, -2, 1, -2),
+		Size = UDim2.fromOffset(22, 22),
+		ZIndex = 9,
 		Parent = self.Frame,
 	})
 
-	for index = 0, 2 do
-		local dot = Create.new("Frame", {
-			Name = "GripDot",
+	for index = 1, 3 do
+		local bar = Create.new("Frame", {
+			Name = "GripBar",
 			AnchorPoint = Vector2.new(1, 1),
-			Position = UDim2.fromOffset(-4 - index * 4, -4 - index * 4),
-			Size = UDim2.fromOffset(2, 2),
-			BackgroundColor3 = palette.SubText,
-			BackgroundTransparency = 0.35 + index * 0.15,
-			ZIndex = 8,
+			Position = UDim2.fromOffset(-3 - (index - 1) * 5, -3 - (index - 1) * 5),
+			Size = UDim2.fromOffset(3 + (index - 1) * 5, 2),
+			Rotation = -45,
+			BackgroundTransparency = 0.3 + (index - 1) * 0.18,
+			ZIndex = 9,
 			Parent = self.ResizeGrip,
 		})
-		Create.corner(dot, UDim.new(1, 0))
+		library:Styled(bar, "SubText", "BackgroundColor3")
+		Create.corner(bar, 1)
+	end
+
+	self.RightGrip = Create.textButton({
+		Name = "ResizeRight",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 0, HEADER_HEIGHT),
+		Size = UDim2.new(0, 6, 1, -(HEADER_HEIGHT + 26)),
+		ZIndex = 9,
+		Parent = self.Frame,
+	})
+
+	self.BottomGrip = Create.textButton({
+		Name = "ResizeBottom",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 26, 1, 0),
+		Size = UDim2.new(1, -52, 0, 6),
+		ZIndex = 9,
+		Parent = self.Frame,
+	})
+
+	if not self.Resizable then
+		self.ResizeGrip.Visible = false
+		self.RightGrip.Visible = false
+		self.BottomGrip.Visible = false
 	end
 
 	self:_updateThemeDots()
@@ -432,13 +509,21 @@ function Window:_bindEvents()
 		end
 	end))
 
-	self:_track(self.ResizeGrip.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch
-		then
-			self:_startResize(input)
-		end
-	end))
+	local grips = {
+		{ Button = self.ResizeGrip, Axes = { X = true, Y = true } },
+		{ Button = self.RightGrip, Axes = { X = true, Y = false } },
+		{ Button = self.BottomGrip, Axes = { X = false, Y = true } },
+	}
+
+	for _, grip in ipairs(grips) do
+		self:_track(grip.Button.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.Touch
+			then
+				self:_startResize(input, grip.Axes)
+			end
+		end))
+	end
 
 	self:_track(UserInputService.InputChanged:Connect(function(input)
 		self:_onInputChanged(input)
@@ -502,12 +587,11 @@ function Window:_bindEvents()
 end
 
 function Window:_updateScale()
-	local screenGui = self.Library.ScreenGui
-	if not screenGui then
+	if not self.Library.ScreenGui then
 		return
 	end
 
-	local size = screenGui.AbsoluteSize
+	local size = self:_viewportSize()
 	if size.X <= 0 or size.Y <= 0 then
 		return
 	end
@@ -515,6 +599,7 @@ function Window:_updateScale()
 	local scale = math.min(size.X / 1280, size.Y / 800)
 	self._baseScale = math.clamp(scale, 0.7, 1.1)
 	self:_applyScale()
+	self:_fitToViewport()
 end
 
 function Window:_applyScale()
@@ -542,12 +627,13 @@ function Window:_startDrag(input)
 	self._dragStartMouse = Vector2.new(input.Position.X, input.Position.Y)
 end
 
-function Window:_startResize(input)
-	if not self.Visible or self.Destroyed then
+function Window:_startResize(input, axes)
+	if not self.Resizable or not self.Visible or self.Destroyed then
 		return
 	end
 
 	self._resizing = true
+	self._resizeAxes = axes or { X = true, Y = true }
 	self._resizeStartMouse = Vector2.new(input.Position.X, input.Position.Y)
 	self._resizeStartSize = Vector2.new(self.Root.AbsoluteSize.X, self.Root.AbsoluteSize.Y)
 	self._resizeStartTopLeft = self.Root.AbsolutePosition - self.Library.Overlay.AbsolutePosition
@@ -577,27 +663,33 @@ function Window:_onInputChanged(input)
 		)
 	elseif self._resizing then
 		local delta = Vector2.new(input.Position.X, input.Position.Y) - self._resizeStartMouse
-		local viewport = self.Library.Overlay.AbsoluteSize
+		local viewport = self:_viewportSize()
 		local factor = self.Scale.Scale
 
 		if factor <= 0 then
 			factor = 1
 		end
 
+		local axes = self._resizeAxes or { X = true, Y = true }
 		local topLeft = self._resizeStartTopLeft or Vector2.new(0, 0)
-		local maxWidth = math.max(self.MinWidth, (viewport.X - topLeft.X - 12) / factor)
-		local maxHeight = math.max(self.MinHeight, (viewport.Y - topLeft.Y - 12) / factor)
-		local width = math.floor(math.clamp(
-			(self._resizeStartSize.X + delta.X) / factor,
-			self.MinWidth,
-			maxWidth
-		))
-		local height = math.floor(math.clamp(
-			(self._resizeStartSize.Y + delta.Y) / factor,
-			self.MinHeight,
-			maxHeight
-		))
 
+		-- Grow only along the axis the grip belongs to (edges resize one axis).
+		local targetWidth = self._resizeStartSize.X / factor
+		local targetHeight = self._resizeStartSize.Y / factor
+		if axes.X then
+			targetWidth += delta.X / factor
+		end
+		if axes.Y then
+			targetHeight += delta.Y / factor
+		end
+
+		local maxWidth = math.max(200, (viewport.X - topLeft.X - 12) / factor)
+		local maxHeight = math.max(160, (viewport.Y - topLeft.Y - 12) / factor)
+		local width = math.floor(math.clamp(targetWidth, math.min(self.MinWidth, maxWidth), maxWidth))
+		local height = math.floor(math.clamp(targetHeight, math.min(self.MinHeight, maxHeight), maxHeight))
+
+		self.Width = width
+		self.Height = height
 		self.Root.Size = UDim2.fromOffset(width, height)
 
 		-- AnchorPoint is centered, so compensate to keep the top-left pinned while resizing.
@@ -764,16 +856,16 @@ function Window:SelectTab(tab, instant)
 	local content = tab.Content
 	content.Visible = true
 
-	if instant then
-		content.GroupTransparency = 0
+	-- A plain Frame cannot group-fade, so `Fade` drives the subtree's
+	-- transparency. Skip it while the window itself is fading in, otherwise the
+	-- two snapshots would capture each other's in-between values.
+	if instant or Fade.playing(self.Root) then
+		Fade.set(content, 0)
 		content.Position = UDim2.fromOffset(0, 0)
 	else
-		content.GroupTransparency = 1
+		Fade.play(content, 1, 0, 0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 		content.Position = UDim2.fromOffset(0, 8)
-		Tween.play(content, {
-			GroupTransparency = 0,
-			Position = UDim2.fromOffset(0, 0),
-		}, Tween.Info.Smooth)
+		Tween.play(content, { Position = UDim2.fromOffset(0, 0) }, Tween.Info.Smooth)
 	end
 
 	for _, other in ipairs(self.Tabs) do
@@ -846,7 +938,7 @@ function Window:Filter(query)
 	end
 
 	for _, tab in ipairs(self.Tabs) do
-		tab:UpdateVisibility(filtering)
+		tab:UpdateVisibility(filtering, query)
 	end
 
 	local active = self.ActiveTab
@@ -867,8 +959,12 @@ function Window:Open(animate)
 	self:_updateScale()
 	self.Root.Visible = true
 
+	if self.Library.Cursor then
+		self.Library.Cursor:Refresh()
+	end
+
 	if animate == false then
-		self.Root.GroupTransparency = 0
+		Fade.set(self.Root, 0)
 		self._animScale = 1
 		self:_applyScale()
 		return
@@ -877,11 +973,10 @@ function Window:Open(animate)
 	self._animToken = (self._animToken or 0) + 1
 	local token = self._animToken
 
-	self.Root.GroupTransparency = 1
+	Fade.play(self.Root, 1, 0, 0.26, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 	self._animScale = 0.96
 	self:_applyScale()
 
-	Tween.play(self.Root, { GroupTransparency = 0 }, Tween.Info.Smooth)
 	Tween.number(0.96, 1, 0.32, function(value)
 		if self.Destroyed or self._animToken ~= token then
 			return
@@ -901,6 +996,10 @@ function Window:Close(animate)
 
 	self.Visible = false
 
+	if self.Library.Cursor then
+		self.Library.Cursor:Refresh()
+	end
+
 	-- A hidden, still-focused search box would swallow the toggle keybind.
 	if self.SearchBox and self.SearchBox:IsFocused() then
 		self.SearchBox:ReleaseFocus()
@@ -916,13 +1015,13 @@ function Window:Close(animate)
 
 	if animate == false then
 		self.Root.Visible = false
-		self.Root.GroupTransparency = 0
+		Fade.set(self.Root, 0)
 		self._animScale = 1
 		self:_applyScale()
 		return
 	end
 
-	Tween.play(self.Root, { GroupTransparency = 1 }, Tween.Info.Fast)
+	Fade.play(self.Root, 0, 1, 0.16)
 	Tween.number(1, 0.96, 0.18, function(value)
 		if self.Destroyed or self._animToken ~= token then
 			return
@@ -931,12 +1030,12 @@ function Window:Close(animate)
 		self:_applyScale()
 	end)
 
-	task.delay(0.22, function()
+	task.delay(0.24, function()
 		if self.Destroyed or self.Visible or self._animToken ~= token then
 			return
 		end
 		self.Root.Visible = false
-		self.Root.GroupTransparency = 0
+		Fade.set(self.Root, 0)
 		self._animScale = 1
 		self:_applyScale()
 	end)
@@ -955,13 +1054,10 @@ function Window:_playLogoIntro()
 		return
 	end
 
+	-- The window's own fade already brings the logo's pixels in; adding a second
+	-- nested fade would snapshot the logo mid-transition. Only motion here.
 	self.Logo.Rotation = -32
-	self.Logo.GroupTransparency = 1
-
-	Tween.play(self.Logo, {
-		Rotation = 0,
-		GroupTransparency = 0,
-	}, Tween.Info.Glide)
+	Tween.play(self.Logo, { Rotation = 0 }, Tween.Info.Glide)
 end
 
 function Window:_playPetalBurst()
@@ -983,7 +1079,7 @@ function Window:_playPetalBurst()
 		Tween.play(petal, {
 			Position = UDim2.fromOffset(targetX, targetY),
 			Rotation = petal.Rotation + math.random(-160, 160),
-			GroupTransparency = 1,
+			BackgroundTransparency = 1,
 			Size = UDim2.fromOffset(2, 3),
 		}, Tween.Info.Glide)
 

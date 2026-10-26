@@ -58,13 +58,17 @@ errors is covered step by step in [RESUME.md](RESUME.md) §2–§3.
    The requires are relative (`require(script.Utils.Create)`), so the folder
    names and module names must match exactly.
 
-5. Verify the tree:
+5. Also paste [`src/Example.lua`](src/Example.lua) into a separate LocalScript
+   if you want the demo menu (see “Running the demo” below).
+
+6. Verify the tree:
 
    ```
    ReplicatedStorage
    └── CherryUI (ModuleScript)
        ├── Core (Folder)
        │   ├── Logo (ModuleScript)
+       │   ├── Cursor (ModuleScript)
        │   └── ThemeManager (ModuleScript)
        ├── Components (Folder)
        │   ├── Window, Tab, Section, Button, Toggle, Slider,
@@ -73,7 +77,7 @@ errors is covered step by step in [RESUME.md](RESUME.md) §2–§3.
        ├── Themes (Folder)
        │   └── Crimson, Pink, Purple, Green, Blue
        └── Utils (Folder)
-           └── Base, Config, Create, Pool, Popup,
+           └── Base, Config, Create, Fade, Pool, Popup,
                Scheduler, Signal, Tween, Util
    ```
 
@@ -84,6 +88,40 @@ Download `CherryUI.rbxm` from the GitHub releases page and drop it into
 
 To build it yourself from source: `rojo build model.project.json -o CherryUI.rbxm`
 (see [RESUME.md](RESUME.md) §5.6).
+
+### Option D — Lua executors (single file)
+
+Executors cannot `require` a ModuleScript tree, so use the pre-built bundle:
+[`dist/CherryUI.lua`](dist/CherryUI.lua). It inlines every module, needs no
+`script` object, and returns the library table.
+
+1. Paste the whole of `dist/CherryUI.lua` into your executor, or load it:
+
+   ```lua
+   local CherryUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/USER/Cherry-UI/main/dist/CherryUI.lua"))()
+   ```
+
+2. Build your menu below it (or in a second script — the bundle publishes
+   itself on `getgenv().CherryUI`):
+
+   ```lua
+   local CherryUI = getgenv().CherryUI
+
+   local Window = CherryUI:CreateWindow({ Title = "Cherry", Subtitle = "FPS Suite" })
+   Window:AddTab("Combat", "◎", function(tab)
+       tab:AddSection("Aimbot"):AddToggle({ Name = "Enable Aimbot" })
+   end)
+   ```
+
+3. Rebuild the bundle after editing `src/`:
+
+   ```bash
+   python3 tools/bundle.py
+   ```
+
+The bundle picks the best GUI parent automatically (`gethui()` when the executor
+exposes it, otherwise `PlayerGui`). [`src/Example.lua`](src/Example.lua) detects
+all three install styles, so it can be pasted below the bundle unchanged.
 
 ---
 
@@ -132,6 +170,38 @@ Section:AddSlider({
 
 The menu opens immediately (set `StartOpen = false` to keep it hidden) and is
 toggled with **RightShift**.
+
+### Cursor
+
+Loading Cherry UI replaces Roblox's pointer with a code-drawn cherry as soon as
+the library is required (or pasted). It needs no uploaded image, recolors with
+the theme and is hidden automatically under shift-lock / first person.
+
+```lua
+CherryUI:SetCursorMode("always")   -- default: cherry everywhere outside shift-lock
+CherryUI:SetCursorMode("menu")     -- only while a window is open
+CherryUI:SetCursorMode("off")      -- restore the Roblox cursor
+CherryUI:GetCursorMode()           -- "always" | "menu" | "off"
+```
+
+The mode can also be set per window:
+`CherryUI:CreateWindow({ Cursor = "menu" })`. Roblox's own cursor is restored on
+`CherryUI:Destroy()`.
+
+### Resizing
+
+The window is draggable from its header and resizable from the bottom-right
+grip (both axes), the right edge (width) and the bottom edge (height). Sizes are
+clamped to the viewport and to `MinWidth` / `MinHeight` (480 × 300 by default):
+
+```lua
+CherryUI:CreateWindow({
+    Size = UDim2.fromOffset(640, 460),
+    MinWidth = 520,
+    MinHeight = 360,
+    Resizable = true,          -- false hides all three grips
+})
+```
 
 ### Tabs
 
@@ -409,6 +479,9 @@ reappear by accident.
 | Menu does not toggle with RightShift | Another script may be consuming input, or focus is inside a text box. Rebind via `CherryUI:SetToggleKey`, and check `UserInputService`. |
 | Keybind shows "None" | Bindings accept `Enum.KeyCode` and the three mouse buttons; other input types are ignored. |
 | UI is too large / small | Resize the window from the bottom-right grip, or change `Size` in `CreateWindow`. The whole window also scales with viewport size. |
+| No cherry cursor | The library builds the ScreenGui when it runs on the client. Require it from a LocalScript (or paste the bundle); in Studio edit mode nothing is created. Check `CherryUI:GetCursorMode()` is not `"off"`. |
+| Roblox cursor vanished after stopping the script | A hard script stop skips `CherryUI:Destroy()`. Call `CherryUI:ResetCursor()` (or `SetCursorMode("off")`) before stopping, or reset `UserInputService.MouseIconEnabled = true` in the command bar. |
+| Cursor sits under the topbar | Use the default `IgnoreGuiInset = false` ScreenGui; the cursor subtracts the `CoreUISafeInsets` itself. |
 | Dropdown appears behind the window | Popups need `CherryUI.Overlay`; do not reparent or destroy the library's `ScreenGui`. |
 | Theme switch leaves some elements unchanged | Custom instances must be registered with `CherryUI:Styled` or `BindGradient`. |
 | Config file never writes | `writefile`/`readfile` are executor functions. In Studio, use `memory` or `custom`; for live games use a validated remote + DataStore. |
@@ -454,6 +527,8 @@ end)
 | `CherryUI:GetThemeNames()` | Ordered theme names. |
 | `CherryUI:SetToggleKey(enumItem)` | Rebind the menu toggle. |
 | `CherryUI:ToggleUI()` | Toggle the primary window. |
+| `CherryUI:SetCursorMode(mode)` / `GetCursorMode()` | `"always"` (default), `"menu"` or `"off"`. |
+| `CherryUI:ResetCursor()` | Restore Roblox's cursor without destroying the UI. |
 | `CherryUI:SaveConfig()` / `LoadConfig()` / `ResetConfig()` | Persistence. |
 | `CherryUI:Styled(instance, token, property?)` | Theme bind a property. |
 | `CherryUI:Destroy()` | Tear everything down. |

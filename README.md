@@ -40,6 +40,11 @@ tight lid on instance churn and update frequency.
 - **Search** — filter every setting from the header search box.
 - **Dependency boxes** — hide controls behind a master toggle with
   `:AddDependency`.
+- **Cherry cursor** — the library swaps Roblox's pointer for a themed cherry
+  drawn in code (`CherryUI:SetCursorMode("menu" | "always" | "off")`).
+- **Runs in executors** — [`dist/CherryUI.lua`](dist/CherryUI.lua) is a
+  single-file bundle for Lua executors and `loadstring`, built by
+  `python3 tools/bundle.py`.
 - **FPS essentials** — keybinds, numeric text boxes, color pickers, sliders and
   dropdowns (single and multi select).
 
@@ -86,6 +91,28 @@ Press **RightShift** to toggle the menu. To rebind it:
 CherryUI:SetToggleKey(Enum.KeyCode.Insert)
 ```
 
+### Executors and single-file scripts
+
+Lua executors cannot `require` a ModuleScript tree, so the library also builds to
+one chunk: [`dist/CherryUI.lua`](dist/CherryUI.lua) (rebuild with
+`python3 tools/bundle.py`). Paste it into the executor, then build your menu
+below it, or load it from a URL:
+
+```lua
+local CherryUI = getgenv().CherryUI
+    or loadstring(game:HttpGet("https://raw.githubusercontent.com/USER/Cherry-UI/main/dist/CherryUI.lua"))()
+
+local Window = CherryUI:CreateWindow({ Title = "Cherry" })
+Window:AddTab("Combat", "◎", function(tab)
+    tab:AddSection("Aimbot"):AddToggle({ Name = "Enable Aimbot" })
+end)
+```
+
+The bundle publishes itself on `getgenv().CherryUI`, so other scripts can reuse
+the same window instead of building a second one. The cherry cursor is applied
+as soon as the library loads; `CherryUI:SetCursorMode("menu")` restricts it to
+the open menu, and `"off"` restores Roblox's pointer.
+
 ## Documentation
 
 The full integration guide lives in **[setup.md](setup.md)**. It covers Rojo and
@@ -118,6 +145,7 @@ src/
 │   └── PlayerList.lua       -- server roster + quick actions
 ├── Core/
 │   ├── ThemeManager.lua     -- runtime palette switching
+│   ├── Cursor.lua           -- code-drawn cherry pointer
 │   └── Logo.lua             -- procedural cherry logo + petals
 ├── Themes/
 │   ├── Crimson.lua
@@ -131,10 +159,15 @@ src/
     ├── Create.lua           -- instance helpers
     ├── Pool.lua             -- instance pool
     ├── Popup.lua            -- dropdown/color-picker popups
+    ├── Fade.lua             -- subtree transparency fades
     ├── Scheduler.lua        -- capped 30 Hz update loop
     ├── Signal.lua           -- lightweight signals
     ├── Tween.lua            -- easing presets
     └── Util.lua             -- numbers, keys, colors, clipboard
+dist/
+└── CherryUI.lua             -- generated single-file bundle (executors)
+tools/
+└── bundle.py                -- builds dist/CherryUI.lua from src/
 ```
 
 ## Design notes

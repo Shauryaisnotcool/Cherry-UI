@@ -24,13 +24,41 @@ function Tween.linear(duration)
 	return TweenInfo.new(duration or 1, Enum.EasingStyle.Linear)
 end
 
+--[[
+	TweenService:Create raises "no property named 'X' for object 'Y'" for a
+	property the instance does not have (GroupTransparency on a Frame is the
+	classic case). A cosmetic animation must never take the whole interface down,
+	so creation is guarded and failures are reported once per offending property.
+]]
+local reported = {}
+
+local function createTween(instance, properties, info)
+	local ok, result = pcall(TweenService.Create, TweenService, instance, info or Tween.Info.Smooth, properties)
+
+	if ok then
+		return result
+	end
+
+	local message = tostring(result)
+	if not reported[message] then
+		reported[message] = true
+		warn("[CherryUI] tween skipped: " .. message)
+	end
+
+	return nil
+end
+
 function Tween.create(instance, properties, info)
-	return TweenService:Create(instance, info or Tween.Info.Smooth, properties)
+	return createTween(instance, properties, info)
 end
 
 function Tween.play(instance, properties, info)
-	local tween = TweenService:Create(instance, info or Tween.Info.Smooth, properties)
-	tween:Play()
+	local tween = createTween(instance, properties, info)
+
+	if tween then
+		tween:Play()
+	end
+
 	return tween
 end
 
@@ -44,19 +72,27 @@ function Tween.number(from, to, duration, callback, style, direction)
 	local holder = Instance.new("NumberValue")
 	holder.Value = from
 
-	local tween = TweenService:Create(
+	local tween = createTween(
 		holder,
+		{ Value = to },
 		TweenInfo.new(
 			duration or 0.3,
 			style or Enum.EasingStyle.Quad,
 			direction or Enum.EasingDirection.Out
-		),
-		{ Value = to }
+		)
 	)
 
 	local connection = holder:GetPropertyChangedSignal("Value"):Connect(function()
 		callback(holder.Value)
 	end)
+
+	if not tween then
+		holder.Value = to
+		connection:Disconnect()
+		holder:Destroy()
+		callback(to)
+		return nil
+	end
 
 	tween.Completed:Once(function()
 		connection:Disconnect()

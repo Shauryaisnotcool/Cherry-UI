@@ -2,14 +2,47 @@
 	Example.lua
 	A complete, FPS-themed Cherry UI menu.
 
-	Place this LocalScript in StarterPlayerScripts (or StarterGui) and make sure
-	the CherryUI module is at ReplicatedStorage.CherryUI.
+	Three ways to run this file:
+
+	1. Studio, Rojo:    LocalScript in StarterPlayerScripts. The loader finds
+	                    ReplicatedStorage.CherryUI (the default.project.json tree).
+	2. Studio, model:   LocalScript in StarterPlayerScripts, require the CherryUI
+	                    model you dropped into ReplicatedStorage.
+	3. Executor:        paste dist/CherryUI.lua first, then this script in the same
+	                    chunk (the bundle publishes getgenv().CherryUI).
+
+	The loader below covers all three, so this file never needs editing.
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local CherryUI = require(ReplicatedStorage:WaitForChild("CherryUI"))
+local function getLibrary()
+	-- Executor / single-file usage: dist/CherryUI.lua already ran and published
+	-- itself on getgenv().
+	if type(getgenv) == "function" then
+		local global = getgenv().CherryUI
+		if type(global) == "table" then
+			return global
+		end
+	end
+
+	-- ModuleScript usage (Rojo project or a model in ReplicatedStorage).
+	local module = ReplicatedStorage:FindFirstChild("CherryUI")
+	if module then
+		return require(module)
+	end
+
+	error(
+		"[Cherry] CherryUI was not found. require(ReplicatedStorage.CherryUI) from a "
+			.. "LocalScript, or paste dist/CherryUI.lua above this example in your executor.",
+		0
+	)
+end
+
+local CherryUI = getLibrary()
+
+print("[Cherry] Example menu loaded (v" .. CherryUI.Version .. ")")
 
 local Window = CherryUI:CreateWindow({
 	Title = "Cherry",
