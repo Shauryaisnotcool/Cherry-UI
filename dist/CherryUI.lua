@@ -6,7 +6,7 @@
 
 	Load it from a LocalScript or a Roblox Lua executor:
 
-		local CherryUI = loadstring(game:HttpGet("<raw url>/dist/CherryUI.lua"))()
+		local CherryUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Shauryaisnotcool/Cherry-UI/refs/heads/main/dist/CherryUI.lua"))()
 		local window = CherryUI:CreateWindow({ Title = "Cherry" })
 
 	The chunk returns the library table (and sets `getgenv().CherryUI`
