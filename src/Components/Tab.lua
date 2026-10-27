@@ -4,11 +4,12 @@
 
 	Lazy loading: pass a builder as the third argument to `window:AddTab` and
 	the heavy content is only constructed the first time the tab is selected:
-		local tab = window:AddTab("Combat", "◎", function(page) ... end)
+		local tab = window:AddTab("Combat", "target", function(page) ... end)
 	Eager `tab:AddSection(...)` calls still work, they just build immediately.
 ]]
 
 local Create = require(script.Parent.Parent.Utils.Create)
+local Icons = require(script.Parent.Parent.Utils.Icons)
 local Section = require(script.Parent.Section)
 local ESPPreview = require(script.Parent.ESPPreview)
 local PlayerList = require(script.Parent.PlayerList)
@@ -149,7 +150,11 @@ function Tab:UpdateVisibility(filtering, query)
 		self.ButtonLabel.TextTransparency = transparency
 	end
 	if self.ButtonIcon then
-		self.ButtonIcon.TextTransparency = transparency
+		if Icons.isIcon(self.ButtonIcon) then
+			Icons.setTransparency(self.ButtonIcon, transparency)
+		else
+			self.ButtonIcon.TextTransparency = transparency
+		end
 	end
 
 	return hasContent

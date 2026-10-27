@@ -5,8 +5,8 @@
 
 		local CherryUI = require(ReplicatedStorage.CherryUI)
 		local window = CherryUI:CreateWindow({ Title = "Cherry" })
-		local tab = window:AddTab("Combat", "◎")
-		tab:AddSection("Aimbot"):AddToggle({ Name = "Enable Aimbot" })
+	local tab = window:AddTab("Combat", "target")
+	tab:AddSection("Aimbot"):AddToggle({ Name = "Enable Aimbot" })
 
 	The module deliberately owns a single ScreenGui (created on first use), one
 	Heartbeat scheduler and one theme manager, no matter how many windows the
@@ -21,6 +21,11 @@ local Create = require(script.Utils.Create)
 local Signal = require(script.Utils.Signal)
 local Scheduler = require(script.Utils.Scheduler)
 local Util = require(script.Utils.Util)
+local Tween = require(script.Utils.Tween)
+local Fade = require(script.Utils.Fade)
+local Icons = require(script.Utils.Icons)
+local Pool = require(script.Utils.Pool)
+local Popup = require(script.Utils.Popup)
 local ConfigManager = require(script.Utils.Config)
 local ThemeManager = require(script.Core.ThemeManager)
 local Cursor = require(script.Core.Cursor)
@@ -45,6 +50,23 @@ function Library.new()
 	local self = setmetatable({}, Library)
 
 	self.Version = "1.0.0"
+
+	--[[
+		Exposed so scripts built on Cherry UI can reuse the same motion, pooling
+		and icon language instead of writing their own:
+			CherryUI.Icons.new("target", frame, 18, CherryUI.Palette.Primary)
+			CherryUI.Pool.new(create, reset)
+			CherryUI.Tween.play(frame, { BackgroundTransparency = 0 }, CherryUI.Tween.Info.Fast)
+	]]
+	self.Create = Create
+	self.Signal = Signal
+	self.Tween = Tween
+	self.Fade = Fade
+	self.Icons = Icons
+	self.Pool = Pool
+	self.Popup = Popup
+	self.Util = Util
+
 	self.Themes = Themes
 	self.ThemeOrder = THEME_ORDER
 	self.Windows = {}
@@ -87,18 +109,44 @@ function Library:Styled(instance, token, property)
 	return self.ThemeManager:Bind(instance, property, token)
 end
 
+--[[
+	Marks that a Keybind control is waiting for a key. The timestamp lets the
+	input handler release a capture that was abandoned (window closed mid-capture,
+	focus stolen) instead of leaving the menu toggle dead forever.
+]]
+function Library:SetCapturing(capturing)
+	self.Capturing = capturing and true or false
+	self._captureStarted = os.clock()
+end
+
+-- How long an unfinished keybind capture may block the menu toggle.
+local CAPTURE_TIMEOUT = 5
+
 function Library:_bindInput()
 	self._inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if gameProcessed or self.Capturing then
-			return
+		if self.Capturing then
+			-- Keybind capture owns the keyboard, but only for a moment: a capture
+			-- that never received a key must not swallow the toggle key.
+			if os.clock() - (self._captureStarted or 0) < CAPTURE_TIMEOUT then
+				return
+			end
+
+			self:SetCapturing(false)
 		end
 
-		if UserInputService:GetFocusedTextBox() then
-			return
-		end
-
+		--[[
+			The toggle key is checked *before* the gameProcessed bail-out.
+			RightShift is a modifier: on some clients it arrives with gameProcessed
+			set, and any focused TextBox (the settings search box is a TextBox) used
+			to disable the toggle entirely. A menu key must always work, so nothing
+			short of an active keybind capture gets to block it.
+		]]
 		if Util.matchesInput(input, self.ToggleKey) then
 			self:ToggleUI()
+			return
+		end
+
+		if gameProcessed then
 			return
 		end
 
@@ -294,6 +342,20 @@ end
 
 function Library:ToggleUI()
 	local window = self.PrimaryWindow
+
+	-- Recover when the primary window was destroyed: toggle any live window so
+	-- the keybind keeps working instead of going quiet.
+	if not window or window.Destroyed then
+		window = nil
+		for candidate in self.Windows do
+			if not candidate.Destroyed then
+				window = candidate
+				self.PrimaryWindow = candidate
+				break
+			end
+		end
+	end
+
 	if window and not window.Destroyed then
 		window:Toggle()
 	end

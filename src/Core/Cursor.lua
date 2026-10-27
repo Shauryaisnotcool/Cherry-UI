@@ -1,12 +1,15 @@
 --[[
 	Core/Cursor.lua
-	The Cherry UI pointer.
+	The Cherry pointer: a stroke-drawn arrow with a cherry badge.
 
-	Roblox cannot change the operating-system cursor from a LocalScript, so the
-	supported route is to hide the default one (`UserInputService.MouseIconEnabled
-	= false`) and draw our own. This cursor is built from GuiObjects like the rest
-	of the library, which means it needs no uploaded image asset, recolors with
-	the active theme, and stays crisp at any resolution.
+	Roblox cannot set an operating-system cursor from a LocalScript and there is
+	no way to ship an uploaded image with a library, so the supported route is to
+	hide the default pointer (`UserInputService.MouseIconEnabled = false`) and
+	draw our own. Everything here is GuiObjects, so it needs no asset id, recolors
+	with the active theme, and stays crisp at any resolution.
+
+	The arrow tip sits exactly at the frame's origin, which makes the hotspot
+	(0, 0): the pointer lands where the user is actually aiming.
 
 	Modes (see `CherryUI:SetCursorMode`):
 	  * "always" - replaces the Roblox pointer as soon as the library loads (default)
@@ -14,11 +17,11 @@
 	  * "off"    - never; the Roblox cursor is left alone
 
 	The cursor also survives mouse-lock changes: `Refresh` re-runs whenever
-	MouseBehavior flips, so unlocking the mouse brings the cherry back without
+	MouseBehavior flips, so unlocking the mouse brings the pointer back without
 	waiting for the menu to be opened or closed.
 
-	Cost: the follow loop is a single RenderStepped connection that exists only
-	while the cursor is actually visible.
+	Cost: one RenderStepped connection that exists only while the cursor is
+	actually visible.
 ]]
 
 local GuiService = game:GetService("GuiService")
@@ -26,16 +29,22 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Create = require(script.Parent.Parent.Utils.Create)
+local Icons = require(script.Parent.Parent.Utils.Icons)
 local Tween = require(script.Parent.Parent.Utils.Tween)
 
 local Cursor = {}
 Cursor.__index = Cursor
 
-local SIZE = 24
+local FRAME = 32
+local ARROW = 24
+-- Design-grid point the arrow tip lives at inside Core/Icons' "cursor" kind.
+local ARROW_TIP = Vector2.new(4.5, 1.5)
+
 local MODES = { menu = true, always = true, off = true }
-local STEM_COLOR = Color3.fromHex("4ADE80")
 local LEAF_DARK = Color3.fromHex("22C55E")
 local LEAF_LIGHT = Color3.fromHex("A7F3D0")
+local STEM_COLOR = Color3.fromHex("4ADE80")
+local BACKING = Color3.fromHex("0B0B0D")
 
 local function topbarInset()
 	local ok, inset = pcall(function()
@@ -64,7 +73,7 @@ function Cursor.new(library)
 	self.Frame = Create.new("Frame", {
 		Name = "CherryCursor",
 		AnchorPoint = Vector2.new(0, 0),
-		Size = UDim2.fromOffset(SIZE, SIZE),
+		Size = UDim2.fromOffset(FRAME, FRAME),
 		BackgroundTransparency = 1,
 		Visible = false,
 		ZIndex = 5000,
@@ -74,55 +83,45 @@ function Cursor.new(library)
 	-- Soft shadow so the pointer reads on light and dark backgrounds alike.
 	local shadow = Create.new("Frame", {
 		Name = "Shadow",
-		Position = UDim2.fromOffset(7, 9),
-		Size = UDim2.fromOffset(14, 13),
+		Position = UDim2.fromOffset(3, 4),
+		Size = UDim2.fromOffset(22, 21),
 		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.62,
+		BackgroundTransparency = 0.6,
 		ZIndex = 1,
 		Parent = self.Frame,
 	})
 	Create.corner(shadow, UDim.new(1, 0))
 
-	-- Stems and leaf (drawn first so the cherries overlap them).
-	for _, stemData in ipairs({
-		{ X = 10, Y = 1, Height = 8, Rotation = 26 },
-		{ X = 14, Y = 1, Height = 7, Rotation = -16 },
-	}) do
-		local stem = Create.new("Frame", {
-			Name = "Stem",
-			Position = UDim2.fromOffset(stemData.X, stemData.Y),
-			Size = UDim2.new(0, 2, 0, stemData.Height),
-			BackgroundColor3 = STEM_COLOR,
-			Rotation = stemData.Rotation,
-			ZIndex = 2,
-			Parent = self.Frame,
-		})
-		Create.corner(stem, UDim.new(0.5, 0))
-	end
+	-- The arrow: a translucent dark copy sits behind the white one so the
+	-- outline stays readable over dark panels without a second asset.
+	local scale = ARROW / Icons.Grid
+	local tipOffset = UDim2.fromOffset(-ARROW_TIP.X * scale, -ARROW_TIP.Y * scale)
 
-	local leaf = Create.new("Frame", {
-		Name = "Leaf",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromOffset(16, 3),
-		Size = UDim2.fromOffset(9, 5),
-		Rotation = -24,
-		ZIndex = 2,
+	local backing = Icons.new("cursor", self.Frame, ARROW + 3, BACKING, 2)
+	backing.Position = tipOffset
+	Icons.setTransparency(backing, 0.45)
+
+	local arrow = Icons.new("cursor", self.Frame, ARROW, Color3.fromHex("FFFFFF"), 3)
+	arrow.Position = tipOffset
+
+	-- Cherry badge tucked under the arrow head, so the pointer is unmistakably
+	-- Cherry UI while still reading as an arrow.
+	local badge = Create.new("Frame", {
+		Name = "Badge",
+		Position = UDim2.fromOffset(13, 15),
+		Size = UDim2.fromOffset(18, 17),
+		BackgroundTransparency = 1,
+		ZIndex = 4,
 		Parent = self.Frame,
 	})
-	Create.corner(leaf, UDim.new(1, 0))
-	Create.new("UIGradient", {
-		Rotation = 40,
-		Color = ColorSequence.new(LEAF_DARK, LEAF_LIGHT),
-		Parent = leaf,
-	})
 
-	local function cherry(position, size)
+	local function cherry(position, size, zIndex)
 		local berry = Create.new("Frame", {
 			Name = "Cherry",
 			Position = position,
 			Size = UDim2.fromOffset(size, size),
-			ZIndex = 3,
-			Parent = self.Frame,
+			ZIndex = zIndex,
+			Parent = badge,
 		})
 		Create.corner(berry, UDim.new(1, 0))
 		library.ThemeManager:BindGradient(
@@ -140,7 +139,7 @@ function Cursor.new(library)
 			BackgroundColor3 = Color3.new(1, 1, 1),
 			BackgroundTransparency = 0.45,
 			Rotation = -20,
-			ZIndex = 4,
+			ZIndex = zIndex + 1,
 			Parent = berry,
 		})
 		Create.corner(shine, UDim.new(1, 0))
@@ -148,8 +147,35 @@ function Cursor.new(library)
 		return berry
 	end
 
-	cherry(UDim2.fromOffset(3, 9), 12)
-	cherry(UDim2.fromOffset(13, 12), 10.5)
+	local stem = Create.new("Frame", {
+		Name = "Stem",
+		Position = UDim2.fromOffset(9, 1),
+		Size = UDim2.new(0, 1.6, 0, 6),
+		BackgroundColor3 = STEM_COLOR,
+		Rotation = 28,
+		ZIndex = 4,
+		Parent = badge,
+	})
+	Create.corner(stem, UDim.new(0.5, 0))
+
+	local leaf = Create.new("Frame", {
+		Name = "Leaf",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(12, 3),
+		Size = UDim2.fromOffset(8, 4.5),
+		Rotation = -24,
+		ZIndex = 4,
+		Parent = badge,
+	})
+	Create.corner(leaf, UDim.new(1, 0))
+	Create.new("UIGradient", {
+		Rotation = 40,
+		Color = ColorSequence.new(LEAF_DARK, LEAF_LIGHT),
+		Parent = leaf,
+	})
+
+	cherry(UDim2.fromOffset(2, 7), 11, 5)
+	cherry(UDim2.fromOffset(11, 10), 9, 6)
 
 	-- Shift-lock / first person hides the pointer; leaving it must restore it
 	-- even when no window was opened in between.
@@ -185,6 +211,7 @@ function Cursor:_shouldShow()
 	return window ~= nil and window.Visible == true and not window.Destroyed
 end
 
+-- The arrow tip is the frame origin, so no hotspot offset is needed.
 function Cursor:_follow()
 	local position = self:_mousePosition()
 	self.Frame.Position = UDim2.fromOffset(position.X, position.Y)
@@ -216,8 +243,6 @@ function Cursor:_setVisible(visible)
 				end
 			end)
 		end
-
-		Tween.play(self.Frame, { Size = UDim2.fromOffset(SIZE, SIZE) }, Tween.Info.Snap)
 	else
 		if self._connection then
 			self._connection:Disconnect()

@@ -14,6 +14,7 @@ local Players = game:GetService("Players")
 
 local Create = require(script.Parent.Parent.Utils.Create)
 local Tween = require(script.Parent.Parent.Utils.Tween)
+local Icons = require(script.Parent.Parent.Utils.Icons)
 local Pool = require(script.Parent.Parent.Utils.Pool)
 local Util = require(script.Parent.Parent.Utils.Util)
 
@@ -107,14 +108,31 @@ function PlayerList.new(library, parent, config)
 
 	self.RefreshButton = Create.textButton({
 		Name = "Refresh",
-		Text = "⟳",
-		TextSize = 13,
+		Text = "",
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -10, 0, 8),
 		Size = UDim2.fromOffset(24, 22),
 		Parent = self.Frame,
 	})
-	library:Styled(self.RefreshButton, "SubText", "TextColor3")
+	Create.corner(self.RefreshButton, 5)
+
+	self.RefreshIcon = Icons.new("refresh", self.RefreshButton, 13, palette.SubText, 2)
+	self.RefreshIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	self.RefreshIcon.Position = UDim2.fromScale(0.5, 0.5)
+	Icons.bindTheme(self.RefreshIcon, library, "SubText")
+
+	self.RefreshButton.MouseEnter:Connect(function()
+		Icons.setColor(self.RefreshIcon, self.Library.Palette.Primary)
+		Tween.play(self.RefreshButton, {
+			BackgroundTransparency = 0.75,
+			BackgroundColor3 = self.Library.Palette.SurfaceHigh,
+		}, Tween.Info.Fast)
+	end)
+
+	self.RefreshButton.MouseLeave:Connect(function()
+		Icons.setColor(self.RefreshIcon, self.Library.Palette.SubText)
+		Tween.play(self.RefreshButton, { BackgroundTransparency = 1 }, Tween.Info.Fast)
+	end)
 
 	self.List = Create.new("ScrollingFrame", {
 		Name = "List",
@@ -236,8 +254,8 @@ function PlayerList:_createRow()
 
 	local actions = {
 		{ Name = "teleport", Label = "TP", Offset = 10, Color = "Primary" },
-		{ Name = "spectate", Label = "◉", Offset = 38 },
-		{ Name = "copy", Label = "⧉", Offset = 66 },
+		{ Name = "spectate", Icon = "eye", Offset = 38 },
+		{ Name = "copy", Icon = "copy", Offset = 66 },
 	}
 
 	local buttons = {}
@@ -245,7 +263,7 @@ function PlayerList:_createRow()
 	for _, action in ipairs(actions) do
 		local button = Create.textButton({
 			Name = action.Name,
-			Text = action.Label,
+			Text = action.Label or "",
 			TextSize = 10,
 			Font = Enum.Font.GothamBold,
 			AnchorPoint = Vector2.new(1, 0.5),
@@ -255,6 +273,12 @@ function PlayerList:_createRow()
 		})
 		Create.corner(button, 4)
 		library:Styled(button, "SubText", "TextColor3")
+
+		local icon = action.Icon and Icons.new(action.Icon, button, 13, palette.SubText, 2)
+		if icon then
+			icon.AnchorPoint = Vector2.new(0.5, 0.5)
+			icon.Position = UDim2.fromScale(0.5, 0.5)
+		end
 
 		button.Activated:Connect(function()
 			local playerName = row:GetAttribute("PlayerName")
@@ -268,11 +292,17 @@ function PlayerList:_createRow()
 			button.TextColor3 = self.Library.Palette.Primary
 			button.BackgroundTransparency = 0.75
 			button.BackgroundColor3 = self.Library.Palette.Surface
+			if icon then
+				Icons.setColor(icon, self.Library.Palette.Primary)
+			end
 		end)
 
 		button.MouseLeave:Connect(function()
 			button.TextColor3 = self.Library.Palette.SubText
 			button.BackgroundTransparency = 1
+			if icon then
+				Icons.setColor(icon, self.Library.Palette.SubText)
+			end
 		end)
 
 		buttons[action.Name] = button
@@ -429,7 +459,6 @@ function PlayerList:_spectate(player)
 	self.Library:Notify({
 		Title = "Spectating",
 		Content = player.Name,
-		Icon = "◉",
 		Type = "info",
 	})
 end

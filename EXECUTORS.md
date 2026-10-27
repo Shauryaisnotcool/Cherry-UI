@@ -87,7 +87,7 @@ local Window = CherryUI:CreateWindow({
     ToggleKey = Enum.KeyCode.RightShift, -- default; rebind in Settings or here
 })
 
-Window:AddTab("Combat", "◎", function(tab)
+Window:AddTab("Combat", "target", function(tab)
     local section = tab:AddSection("Aimbot")
     local master = section:AddToggle({ Name = "Enable Aimbot" })
     section:AddSlider({ Name = "FOV", Min = 10, Max = 360, Default = 90, Suffix = "°" }):AddDependency(master)
@@ -153,7 +153,7 @@ CherryUI:Notify({
     Title = "Kill confirmed",
     Content = "Target eliminated at 214 studs.",
     Type = "success",          -- "success" | "warning" | "error" | info (default)
-    Icon = "✓",
+    Icon = "success",
     Duration = 4,              -- seconds
 })
 ```

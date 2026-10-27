@@ -73,7 +73,7 @@ local Window = CherryUI:CreateWindow({
     Subtitle = "FPS Suite",
 })
 
-local Tab = Window:AddTab("Combat", "◎")
+local Tab = Window:AddTab("Combat", "target")
 local Section = Tab:AddSection("Aimbot")
 
 Section:AddToggle({
@@ -103,7 +103,7 @@ local CherryUI = getgenv().CherryUI
     or loadstring(game:HttpGet("https://raw.githubusercontent.com/USER/Cherry-UI/main/dist/CherryUI.lua"))()
 
 local Window = CherryUI:CreateWindow({ Title = "Cherry" })
-Window:AddTab("Combat", "◎", function(tab)
+Window:AddTab("Combat", "target", function(tab)
     tab:AddSection("Aimbot"):AddToggle({ Name = "Enable Aimbot" })
 end)
 ```
@@ -118,6 +118,9 @@ the open menu, and `"off"` restores Roblox's pointer.
 The full integration guide lives in **[setup.md](setup.md)**. It covers Rojo and
 manual installation, every component, themes, notifications, config backends,
 the ESP preview hook, player list actions and troubleshooting.
+
+The complete function reference — every method, config key and icon name — is
+**[API.md](API.md)**.
 
 Working on Cherry UI itself? **[RESUME.md](RESUME.md)** covers the development
 loop: the Rojo plugin end to end, both project files, static checks that run
@@ -157,6 +160,7 @@ src/
     ├── Base.lua             -- shared component behavior
     ├── Config.lua           -- save/load manager
     ├── Create.lua           -- instance helpers
+    ├── Icons.lua            -- font-independent drawn icons
     ├── Pool.lua             -- instance pool
     ├── Popup.lua            -- dropdown/color-picker popups
     ├── Fade.lua             -- subtree transparency fades

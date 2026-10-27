@@ -18,6 +18,7 @@ local UserInputService = game:GetService("UserInputService")
 local Create = require(script.Parent.Parent.Utils.Create)
 local Tween = require(script.Parent.Parent.Utils.Tween)
 local Fade = require(script.Parent.Parent.Utils.Fade)
+local Icons = require(script.Parent.Parent.Utils.Icons)
 local Logo = require(script.Parent.Parent.Core.Logo)
 local Tab = require(script.Parent.Tab)
 
@@ -285,16 +286,9 @@ function Window:_build()
 	self.SearchStroke = Create.stroke(self.SearchFrame, palette.Outline, 1, 0.35)
 	library:Styled(self.SearchStroke, "Outline", "Color")
 
-	self.SearchIcon = Create.label({
-		Name = "Icon",
-		Text = "⌕",
-		TextSize = 14,
-		Position = UDim2.fromOffset(7, 0),
-		Size = UDim2.fromOffset(14, 24),
-		ZIndex = 7,
-		Parent = self.SearchFrame,
-	})
-	library:Styled(self.SearchIcon, "Placeholder", "TextColor3")
+	self.SearchIcon = Icons.new("search", self.SearchFrame, 13, palette.Placeholder, 7)
+	self.SearchIcon.Position = UDim2.fromOffset(7, 5.5)
+	Icons.bindTheme(self.SearchIcon, library, "Placeholder")
 
 	self.SearchBox = Create.new("TextBox", {
 		Name = "Search",
@@ -320,13 +314,15 @@ function Window:_build()
 		Size = UDim2.fromOffset(24, 24),
 		BackgroundColor3 = palette.SurfaceHigh,
 		BackgroundTransparency = 1,
-		Text = "✕",
-		TextSize = 13,
-		TextColor3 = palette.SubText,
+		Text = "",
 		ZIndex = 7,
 		Parent = self.Header,
 	})
 	Create.corner(self.CloseButton, 12)
+
+	self.CloseIcon = Icons.new("close", self.CloseButton, 12, palette.SubText, 8)
+	self.CloseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	self.CloseIcon.Position = UDim2.fromScale(0.5, 0.5)
 
 	-- Tab bar.
 	self.TabBar = Create.new("Frame", {
@@ -537,6 +533,21 @@ function Window:_bindEvents()
 		self:Close()
 	end))
 
+	-- The close button reacts in the danger colour so it never looks like a
+	-- plain square: background tint, icon recolour, and a small scale pop.
+	self:_track(self.CloseButton.MouseEnter:Connect(function()
+		local palette = self.Library.Palette
+		Tween.play(self.CloseButton, { BackgroundTransparency = 0.8 }, Tween.Info.Fast)
+		Icons.setColor(self.CloseIcon, palette.Danger)
+		Icons.setSize(self.CloseIcon, 14, Tween.Info.Fast)
+	end))
+
+	self:_track(self.CloseButton.MouseLeave:Connect(function()
+		Tween.play(self.CloseButton, { BackgroundTransparency = 1 }, Tween.Info.Fast)
+		Icons.setColor(self.CloseIcon, self.Library.Palette.SubText)
+		Icons.setSize(self.CloseIcon, 12, Tween.Info.Fast)
+	end))
+
 	self:_track(self.CloseButton.MouseEnter:Connect(function()
 		Tween.play(self.CloseButton, {
 			BackgroundTransparency = 0.15,
@@ -714,6 +725,12 @@ function Window:AddTab(name, icon, builder)
 		return nil
 	end
 
+	-- window:AddTab("Combat", function(tab) ... end) works too.
+	if type(icon) == "function" and builder == nil then
+		builder = icon
+		icon = nil
+	end
+
 	local tab = Tab.new(self.Library, self, {
 		Name = name,
 		Icon = icon,
@@ -733,10 +750,17 @@ function Window:AddTab(name, icon, builder)
 	button.LayoutOrder = #self.Tabs
 	Create.corner(button, 5)
 
-	local hasIcon = type(icon) == "string" and icon ~= ""
+	-- Tab icons accept a friendly name / glyph ("combat", "◎", "🎯") that maps
+	-- to a drawn icon; anything else is rendered as text so plain labels and
+	-- emoji still work.
+	local kind = Icons.resolve(icon)
+	local hasIcon = kind ~= nil or (type(icon) == "string" and icon ~= "")
 	local offset = hasIcon and 26 or 8
 
-	if hasIcon then
+	if kind then
+		tab.ButtonIcon = Icons.new(kind, button, 15, palette.SubText, 7)
+		tab.ButtonIcon.Position = UDim2.fromOffset(7, 5.5)
+	elseif hasIcon then
 		tab.ButtonIcon = Create.label({
 			Name = "Icon",
 			Text = icon,
@@ -819,9 +843,13 @@ function Window:_setTabActive(tab, active)
 	}, info)
 
 	if tab.ButtonIcon then
-		Tween.play(tab.ButtonIcon, {
-			TextColor3 = active and palette.Primary or palette.SubText,
-		}, info)
+		local color = active and palette.Primary or palette.SubText
+
+		if Icons.isIcon(tab.ButtonIcon) then
+			Icons.setColor(tab.ButtonIcon, color)
+		else
+			Tween.play(tab.ButtonIcon, { TextColor3 = color }, info)
+		end
 	end
 
 	Tween.play(tab.Indicator, {

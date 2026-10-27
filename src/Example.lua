@@ -55,7 +55,7 @@ local Window = CherryUI:CreateWindow({
 -- Combat
 --------------------------------------------------------------------------
 
-Window:AddTab("Combat", "◎", function(tab)
+Window:AddTab("Combat", "target", function(tab)
 	local aim = tab:AddSection("Aimbot")
 	local aimMaster = aim:AddToggle({
 		Name = "Enable Aimbot",
@@ -121,7 +121,6 @@ Window:AddTab("Combat", "◎", function(tab)
 				Title = "Weapon settings reset",
 				Content = "Recoil, spread and reload are back to defaults.",
 				Type = "success",
-				Icon = "✓",
 			})
 		end,
 	})
@@ -131,7 +130,7 @@ end)
 -- Visuals + live ESP preview
 --------------------------------------------------------------------------
 
-Window:AddTab("Visuals", "◈", function(tab)
+Window:AddTab("Visuals", "layers", function(tab)
 	local preview = tab:AddESPPreview({
 		Name = "ESP Preview",
 		Height = 300,
@@ -192,7 +191,7 @@ end)
 -- Players
 --------------------------------------------------------------------------
 
-local playersTab = Window:AddTab("Players", "☰")
+local playersTab = Window:AddTab("Players", "players")
 local playerList = playersTab:AddPlayerList({ Height = 340 })
 
 local teleportRemote = ReplicatedStorage:FindFirstChild("TeleportRequest")
@@ -216,7 +215,7 @@ playersTab:AddSection("Notes"):AddLabel(
 -- Settings
 --------------------------------------------------------------------------
 
-Window:AddTab("Settings", "⚙", function(tab)
+Window:AddTab("Settings", "settings", function(tab)
 	local appearance = tab:AddSection("Appearance")
 	local themeDropdown = appearance:AddDropdown({
 		Name = "Theme",
@@ -252,7 +251,6 @@ Window:AddTab("Settings", "⚙", function(tab)
 				Title = "Injected",
 				Content = "Cherry UI loaded successfully.",
 				Type = "success",
-				Icon = "✓",
 				Duration = 4,
 			})
 		end,
@@ -265,7 +263,6 @@ Window:AddTab("Settings", "⚙", function(tab)
 				Title = "Unsaved changes",
 				Content = "Your config has unsaved changes.",
 				Type = "warning",
-				Icon = "!",
 				Duration = 4,
 			})
 		end,
@@ -278,7 +275,6 @@ Window:AddTab("Settings", "⚙", function(tab)
 				Title = "Kick detected",
 				Content = "The server rejected your last action.",
 				Type = "error",
-				Icon = "×",
 				Duration = 5,
 			})
 		end,
@@ -361,6 +357,5 @@ end)
 CherryUI:Notify({
 	Title = "Cherry UI " .. CherryUI.Version,
 	Content = "Press RightShift to toggle the menu. Use the search bar to filter settings.",
-	Icon = "◈",
 	Duration = 6,
 })

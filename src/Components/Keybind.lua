@@ -103,7 +103,9 @@ function Keybind:BeginCapture()
 	end
 
 	self.Capturing = true
-	self.Library.Capturing = true
+	-- SetCapturing also stamps the start time, so an abandoned capture times out
+	-- instead of blocking the menu toggle forever.
+	self.Library:SetCapturing(true)
 
 	self.KeyButton.Text = "Press a key"
 	self.KeyButton.TextColor3 = self.Library.Palette.Primary
@@ -136,7 +138,7 @@ function Keybind:EndCapture()
 	end
 
 	self.Capturing = false
-	self.Library.Capturing = false
+	self.Library:SetCapturing(false)
 
 	if self.CaptureConnection then
 		self.CaptureConnection:Disconnect()

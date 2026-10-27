@@ -10,6 +10,7 @@
 local Create = require(script.Parent.Parent.Utils.Create)
 local Tween = require(script.Parent.Parent.Utils.Tween)
 local Fade = require(script.Parent.Parent.Utils.Fade)
+local Icons = require(script.Parent.Parent.Utils.Icons)
 local Pool = require(script.Parent.Parent.Utils.Pool)
 
 local Notification = {}
@@ -109,9 +110,11 @@ function Notification:_createCard()
 	})
 	Create.corner(iconHolder, 8)
 
+	-- Text label for plain glyphs/emoji; drawn icons are built on demand in the
+	-- same holder (see `_setIcon`), because a drawn icon is fixed at one kind.
 	local iconLabel = Create.label({
-		Name = "Icon",
-		Text = "◆",
+		Name = "IconText",
+		Text = "",
 		TextSize = 15,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextYAlignment = Enum.TextYAlignment.Center,
@@ -157,14 +160,29 @@ function Notification:_createCard()
 
 	local close = Create.textButton({
 		Name = "Close",
-		Text = "✕",
-		TextSize = 11,
+		Text = "",
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -10, 0, 10),
 		Size = UDim2.fromOffset(18, 18),
 		Parent = card,
 	})
+	Create.corner(close, 9)
+
+	local closeIcon = Icons.new("close", close, 11, palette.SubText, 2)
+	closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	closeIcon.Position = UDim2.fromScale(0.5, 0.5)
+
 	library:Styled(close, "SubText", "TextColor3")
+
+	close.MouseEnter:Connect(function()
+		Icons.setColor(closeIcon, palette.Danger)
+		Tween.play(close, { BackgroundTransparency = 0.8, BackgroundColor3 = palette.Danger }, Tween.Info.Fast)
+	end)
+
+	close.MouseLeave:Connect(function()
+		Icons.setColor(closeIcon, palette.SubText)
+		Tween.play(close, { BackgroundTransparency = 1 }, Tween.Info.Fast)
+	end)
 
 	local progressTrack = Create.new("Frame", {
 		Name = "ProgressTrack",
@@ -190,6 +208,8 @@ function Notification:_createCard()
 		IconHolder = iconHolder,
 		IconLabel = iconLabel,
 		IconImage = iconImage,
+		Icon = nil,
+		DefaultKind = "diamond",
 		Title = title,
 		Content = content,
 		Close = close,
@@ -229,15 +249,49 @@ function Notification:_createCard()
 		end
 	end)
 
-	close.MouseEnter:Connect(function()
-		close.TextColor3 = self.Library.Palette.Text
-	end)
-
-	close.MouseLeave:Connect(function()
-		close.TextColor3 = self.Library.Palette.SubText
-	end)
-
 	return wrapper
+end
+
+--[[
+	Picks the card's leading icon:
+	  * "rbxassetid://…"  -> the ImageLabel (custom art)
+	  * a known name/glyph -> a drawn icon, recoloured to the card's accent
+	  * anything else     -> the raw glyph/emoji in the text label
+	Drawn icons are rebuilt per show because an icon instance is fixed at one
+	kind; the card itself is still pooled.
+]]
+function Notification:_setIcon(widgets, accent, icon)
+	local kind = nil
+
+	if type(icon) == "string" and string.sub(icon, 1, 10) == "rbxassetid" then
+		widgets.IconImage.Image = icon
+		widgets.IconImage.Visible = true
+		widgets.IconLabel.Visible = false
+	elseif icon == nil then
+		kind = widgets.DefaultKind or "diamond"
+	else
+		kind = Icons.resolve(icon)
+	end
+
+	if widgets.Icon then
+		widgets.Icon:Destroy()
+		widgets.Icon = nil
+	end
+
+	if kind then
+		widgets.IconImage.Visible = false
+		widgets.IconImage.Image = ""
+		widgets.IconLabel.Visible = false
+
+		local drawn = Icons.new(kind, widgets.IconHolder, 15, accent, 3)
+		drawn.AnchorPoint = Vector2.new(0.5, 0.5)
+		drawn.Position = UDim2.fromScale(0.5, 0.5)
+		widgets.Icon = drawn
+	elseif type(icon) == "string" and icon ~= "" and string.sub(icon, 1, 10) ~= "rbxassetid" then
+		widgets.IconLabel.Visible = true
+		widgets.IconLabel.Text = icon
+		widgets.IconLabel.TextColor3 = accent
+	end
 end
 
 function Notification:_resetCard(wrapper)
@@ -257,6 +311,11 @@ function Notification:_resetCard(wrapper)
 	widgets.IconImage.Visible = false
 	widgets.IconImage.Image = ""
 	widgets.IconLabel.Visible = true
+
+	if widgets.Icon then
+		widgets.Icon:Destroy()
+		widgets.Icon = nil
+	end
 end
 
 function Notification:Show(config)
@@ -296,24 +355,21 @@ function Notification:Show(config)
 
 	widgets.Accent.BackgroundColor3 = accent
 	widgets.IconHolder.BackgroundColor3 = accent
-	widgets.IconLabel.TextColor3 = accent
 	widgets.ProgressTrack.BackgroundColor3 = accent
 	widgets.ProgressFill.BackgroundColor3 = accent
 	widgets.Close.TextColor3 = palette.SubText
 	widgets.Title.Text = tostring(config.Title or "Notification")
 	widgets.Content.Text = tostring(config.Content or "")
 
-	local icon = config.Icon
-	if type(icon) == "string" and string.sub(icon, 1, 10) == "rbxassetid" then
-		widgets.IconImage.Image = icon
-		widgets.IconImage.Visible = true
-		widgets.IconLabel.Visible = false
-	else
-		widgets.IconImage.Visible = false
-		widgets.IconImage.Image = ""
-		widgets.IconLabel.Visible = true
-		widgets.IconLabel.Text = (type(icon) == "string" and icon ~= "") and icon or "◆"
-	end
+	-- Type drives the default icon when the caller did not pass one.
+	local kind = config.Type
+	widgets.DefaultKind = (kind == "success" and "success")
+		or (kind == "warning" and "warning")
+		or ((kind == "error" or kind == "danger") and "error")
+		or (kind == "info" and "info")
+		or "diamond"
+
+	self:_setIcon(widgets, accent, config.Icon)
 
 	local entry = {
 		Id = id,

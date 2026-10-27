@@ -6,7 +6,7 @@
 
 	Load it from a LocalScript or a Roblox Lua executor:
 
-		local CherryUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Shauryaisnotcool/Cherry-UI/refs/heads/main/dist/CherryUI.lua"))()
+		local CherryUI = loadstring(game:HttpGet("<raw url>/dist/CherryUI.lua"))()
 		local window = CherryUI:CreateWindow({ Title = "Cherry" })
 
 	The chunk returns the library table (and sets `getgenv().CherryUI`
@@ -655,6 +655,7 @@ __modules["Components/Dropdown"] = function()
 	local Base = __require("Utils/Base")
 	local Create = __require("Utils/Create")
 	local Tween = __require("Utils/Tween")
+	local Icons = __require("Utils/Icons")
 	local Pool = __require("Utils/Pool")
 	local Popup = __require("Utils/Popup")
 
@@ -735,19 +736,10 @@ __modules["Components/Dropdown"] = function()
 			Parent = self.Hit,
 		})
 
-		self.Chevron = Create.label({
-			Name = "Chevron",
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -10, 0.5, 0),
-			Size = UDim2.fromOffset(12, 12),
-			Text = "▾",
-			TextSize = 12,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			TextYAlignment = Enum.TextYAlignment.Center,
-			ZIndex = 3,
-			Parent = self.Hit,
-		})
-		library:Styled(self.Chevron, "SubText", "TextColor3")
+		self.Chevron = Icons.new("chevron", self.Hit, 12, library.Palette.SubText, 3)
+		self.Chevron.AnchorPoint = Vector2.new(1, 0.5)
+		self.Chevron.Position = UDim2.new(1, -10, 0.5, 0)
+		Icons.bindTheme(self.Chevron, library, "SubText")
 
 		self:_renderField()
 
@@ -848,17 +840,10 @@ __modules["Components/Dropdown"] = function()
 			Create.corner(option, 6)
 			Create.padding(option, 0, 8, 0, 10)
 
-			local check = Create.label({
-				Name = "Check",
-				Text = "✓",
-				AnchorPoint = Vector2.new(1, 0.5),
-				Position = UDim2.new(1, -9, 0.5, 0),
-				Size = UDim2.fromOffset(14, 14),
-				TextSize = 11,
-				TextXAlignment = Enum.TextXAlignment.Center,
-				Visible = false,
-				Parent = option,
-			})
+			local check = Icons.new("check", option, 13, self.Library.Palette.Primary, 4)
+			check.AnchorPoint = Vector2.new(1, 0.5)
+			check.Position = UDim2.new(1, -9, 0.5, 0)
+			check.Visible = false
 
 			self._widgets[option] = { Check = check }
 
@@ -916,7 +901,7 @@ __modules["Components/Dropdown"] = function()
 			button.BackgroundTransparency = selected and 0.75 or 1
 
 			widgets.Check.Visible = selected
-			widgets.Check.TextColor3 = palette.Primary
+			Icons.setColor(widgets.Check, palette.Primary)
 
 			table.insert(self._rendered, { Button = button })
 		end
@@ -1804,7 +1789,9 @@ __modules["Components/Keybind"] = function()
 		end
 
 		self.Capturing = true
-		self.Library.Capturing = true
+		-- SetCapturing also stamps the start time, so an abandoned capture times out
+		-- instead of blocking the menu toggle forever.
+		self.Library:SetCapturing(true)
 
 		self.KeyButton.Text = "Press a key"
 		self.KeyButton.TextColor3 = self.Library.Palette.Primary
@@ -1837,7 +1824,7 @@ __modules["Components/Keybind"] = function()
 		end
 
 		self.Capturing = false
-		self.Library.Capturing = false
+		self.Library:SetCapturing(false)
 
 		if self.CaptureConnection then
 			self.CaptureConnection:Disconnect()
@@ -1891,6 +1878,7 @@ __modules["Components/Notification"] = function()
 	local Create = __require("Utils/Create")
 	local Tween = __require("Utils/Tween")
 	local Fade = __require("Utils/Fade")
+	local Icons = __require("Utils/Icons")
 	local Pool = __require("Utils/Pool")
 
 	local Notification = {}
@@ -1990,9 +1978,11 @@ __modules["Components/Notification"] = function()
 		})
 		Create.corner(iconHolder, 8)
 
+		-- Text label for plain glyphs/emoji; drawn icons are built on demand in the
+		-- same holder (see `_setIcon`), because a drawn icon is fixed at one kind.
 		local iconLabel = Create.label({
-			Name = "Icon",
-			Text = "◆",
+			Name = "IconText",
+			Text = "",
 			TextSize = 15,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			TextYAlignment = Enum.TextYAlignment.Center,
@@ -2038,14 +2028,29 @@ __modules["Components/Notification"] = function()
 
 		local close = Create.textButton({
 			Name = "Close",
-			Text = "✕",
-			TextSize = 11,
+			Text = "",
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, -10, 0, 10),
 			Size = UDim2.fromOffset(18, 18),
 			Parent = card,
 		})
+		Create.corner(close, 9)
+
+		local closeIcon = Icons.new("close", close, 11, palette.SubText, 2)
+		closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+		closeIcon.Position = UDim2.fromScale(0.5, 0.5)
+
 		library:Styled(close, "SubText", "TextColor3")
+
+		close.MouseEnter:Connect(function()
+			Icons.setColor(closeIcon, palette.Danger)
+			Tween.play(close, { BackgroundTransparency = 0.8, BackgroundColor3 = palette.Danger }, Tween.Info.Fast)
+		end)
+
+		close.MouseLeave:Connect(function()
+			Icons.setColor(closeIcon, palette.SubText)
+			Tween.play(close, { BackgroundTransparency = 1 }, Tween.Info.Fast)
+		end)
 
 		local progressTrack = Create.new("Frame", {
 			Name = "ProgressTrack",
@@ -2071,6 +2076,8 @@ __modules["Components/Notification"] = function()
 			IconHolder = iconHolder,
 			IconLabel = iconLabel,
 			IconImage = iconImage,
+			Icon = nil,
+			DefaultKind = "diamond",
 			Title = title,
 			Content = content,
 			Close = close,
@@ -2110,15 +2117,49 @@ __modules["Components/Notification"] = function()
 			end
 		end)
 
-		close.MouseEnter:Connect(function()
-			close.TextColor3 = self.Library.Palette.Text
-		end)
-
-		close.MouseLeave:Connect(function()
-			close.TextColor3 = self.Library.Palette.SubText
-		end)
-
 		return wrapper
+	end
+
+	--[[
+		Picks the card's leading icon:
+		  * "rbxassetid://…"  -> the ImageLabel (custom art)
+		  * a known name/glyph -> a drawn icon, recoloured to the card's accent
+		  * anything else     -> the raw glyph/emoji in the text label
+		Drawn icons are rebuilt per show because an icon instance is fixed at one
+		kind; the card itself is still pooled.
+	]]
+	function Notification:_setIcon(widgets, accent, icon)
+		local kind = nil
+
+		if type(icon) == "string" and string.sub(icon, 1, 10) == "rbxassetid" then
+			widgets.IconImage.Image = icon
+			widgets.IconImage.Visible = true
+			widgets.IconLabel.Visible = false
+		elseif icon == nil then
+			kind = widgets.DefaultKind or "diamond"
+		else
+			kind = Icons.resolve(icon)
+		end
+
+		if widgets.Icon then
+			widgets.Icon:Destroy()
+			widgets.Icon = nil
+		end
+
+		if kind then
+			widgets.IconImage.Visible = false
+			widgets.IconImage.Image = ""
+			widgets.IconLabel.Visible = false
+
+			local drawn = Icons.new(kind, widgets.IconHolder, 15, accent, 3)
+			drawn.AnchorPoint = Vector2.new(0.5, 0.5)
+			drawn.Position = UDim2.fromScale(0.5, 0.5)
+			widgets.Icon = drawn
+		elseif type(icon) == "string" and icon ~= "" and string.sub(icon, 1, 10) ~= "rbxassetid" then
+			widgets.IconLabel.Visible = true
+			widgets.IconLabel.Text = icon
+			widgets.IconLabel.TextColor3 = accent
+		end
 	end
 
 	function Notification:_resetCard(wrapper)
@@ -2138,6 +2179,11 @@ __modules["Components/Notification"] = function()
 		widgets.IconImage.Visible = false
 		widgets.IconImage.Image = ""
 		widgets.IconLabel.Visible = true
+
+		if widgets.Icon then
+			widgets.Icon:Destroy()
+			widgets.Icon = nil
+		end
 	end
 
 	function Notification:Show(config)
@@ -2177,24 +2223,21 @@ __modules["Components/Notification"] = function()
 
 		widgets.Accent.BackgroundColor3 = accent
 		widgets.IconHolder.BackgroundColor3 = accent
-		widgets.IconLabel.TextColor3 = accent
 		widgets.ProgressTrack.BackgroundColor3 = accent
 		widgets.ProgressFill.BackgroundColor3 = accent
 		widgets.Close.TextColor3 = palette.SubText
 		widgets.Title.Text = tostring(config.Title or "Notification")
 		widgets.Content.Text = tostring(config.Content or "")
 
-		local icon = config.Icon
-		if type(icon) == "string" and string.sub(icon, 1, 10) == "rbxassetid" then
-			widgets.IconImage.Image = icon
-			widgets.IconImage.Visible = true
-			widgets.IconLabel.Visible = false
-		else
-			widgets.IconImage.Visible = false
-			widgets.IconImage.Image = ""
-			widgets.IconLabel.Visible = true
-			widgets.IconLabel.Text = (type(icon) == "string" and icon ~= "") and icon or "◆"
-		end
+		-- Type drives the default icon when the caller did not pass one.
+		local kind = config.Type
+		widgets.DefaultKind = (kind == "success" and "success")
+			or (kind == "warning" and "warning")
+			or ((kind == "error" or kind == "danger") and "error")
+			or (kind == "info" and "info")
+			or "diamond"
+
+		self:_setIcon(widgets, accent, config.Icon)
 
 		local entry = {
 			Id = id,
@@ -2349,6 +2392,7 @@ __modules["Components/PlayerList"] = function()
 
 	local Create = __require("Utils/Create")
 	local Tween = __require("Utils/Tween")
+	local Icons = __require("Utils/Icons")
 	local Pool = __require("Utils/Pool")
 	local Util = __require("Utils/Util")
 
@@ -2442,14 +2486,31 @@ __modules["Components/PlayerList"] = function()
 
 		self.RefreshButton = Create.textButton({
 			Name = "Refresh",
-			Text = "⟳",
-			TextSize = 13,
+			Text = "",
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, -10, 0, 8),
 			Size = UDim2.fromOffset(24, 22),
 			Parent = self.Frame,
 		})
-		library:Styled(self.RefreshButton, "SubText", "TextColor3")
+		Create.corner(self.RefreshButton, 5)
+
+		self.RefreshIcon = Icons.new("refresh", self.RefreshButton, 13, palette.SubText, 2)
+		self.RefreshIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+		self.RefreshIcon.Position = UDim2.fromScale(0.5, 0.5)
+		Icons.bindTheme(self.RefreshIcon, library, "SubText")
+
+		self.RefreshButton.MouseEnter:Connect(function()
+			Icons.setColor(self.RefreshIcon, self.Library.Palette.Primary)
+			Tween.play(self.RefreshButton, {
+				BackgroundTransparency = 0.75,
+				BackgroundColor3 = self.Library.Palette.SurfaceHigh,
+			}, Tween.Info.Fast)
+		end)
+
+		self.RefreshButton.MouseLeave:Connect(function()
+			Icons.setColor(self.RefreshIcon, self.Library.Palette.SubText)
+			Tween.play(self.RefreshButton, { BackgroundTransparency = 1 }, Tween.Info.Fast)
+		end)
 
 		self.List = Create.new("ScrollingFrame", {
 			Name = "List",
@@ -2571,8 +2632,8 @@ __modules["Components/PlayerList"] = function()
 
 		local actions = {
 			{ Name = "teleport", Label = "TP", Offset = 10, Color = "Primary" },
-			{ Name = "spectate", Label = "◉", Offset = 38 },
-			{ Name = "copy", Label = "⧉", Offset = 66 },
+			{ Name = "spectate", Icon = "eye", Offset = 38 },
+			{ Name = "copy", Icon = "copy", Offset = 66 },
 		}
 
 		local buttons = {}
@@ -2580,7 +2641,7 @@ __modules["Components/PlayerList"] = function()
 		for _, action in ipairs(actions) do
 			local button = Create.textButton({
 				Name = action.Name,
-				Text = action.Label,
+				Text = action.Label or "",
 				TextSize = 10,
 				Font = Enum.Font.GothamBold,
 				AnchorPoint = Vector2.new(1, 0.5),
@@ -2590,6 +2651,12 @@ __modules["Components/PlayerList"] = function()
 			})
 			Create.corner(button, 4)
 			library:Styled(button, "SubText", "TextColor3")
+
+			local icon = action.Icon and Icons.new(action.Icon, button, 13, palette.SubText, 2)
+			if icon then
+				icon.AnchorPoint = Vector2.new(0.5, 0.5)
+				icon.Position = UDim2.fromScale(0.5, 0.5)
+			end
 
 			button.Activated:Connect(function()
 				local playerName = row:GetAttribute("PlayerName")
@@ -2603,11 +2670,17 @@ __modules["Components/PlayerList"] = function()
 				button.TextColor3 = self.Library.Palette.Primary
 				button.BackgroundTransparency = 0.75
 				button.BackgroundColor3 = self.Library.Palette.Surface
+				if icon then
+					Icons.setColor(icon, self.Library.Palette.Primary)
+				end
 			end)
 
 			button.MouseLeave:Connect(function()
 				button.TextColor3 = self.Library.Palette.SubText
 				button.BackgroundTransparency = 1
+				if icon then
+					Icons.setColor(icon, self.Library.Palette.SubText)
+				end
 			end)
 
 			buttons[action.Name] = button
@@ -2764,7 +2837,6 @@ __modules["Components/PlayerList"] = function()
 		self.Library:Notify({
 			Title = "Spectating",
 			Content = player.Name,
-			Icon = "◉",
 			Type = "info",
 		})
 	end
@@ -3319,11 +3391,12 @@ __modules["Components/Tab"] = function()
 
 		Lazy loading: pass a builder as the third argument to `window:AddTab` and
 		the heavy content is only constructed the first time the tab is selected:
-			local tab = window:AddTab("Combat", "◎", function(page) ... end)
+			local tab = window:AddTab("Combat", "target", function(page) ... end)
 		Eager `tab:AddSection(...)` calls still work, they just build immediately.
 	]]
 
 	local Create = __require("Utils/Create")
+	local Icons = __require("Utils/Icons")
 	local Section = __require("Components/Section")
 	local ESPPreview = __require("Components/ESPPreview")
 	local PlayerList = __require("Components/PlayerList")
@@ -3464,7 +3537,11 @@ __modules["Components/Tab"] = function()
 			self.ButtonLabel.TextTransparency = transparency
 		end
 		if self.ButtonIcon then
-			self.ButtonIcon.TextTransparency = transparency
+			if Icons.isIcon(self.ButtonIcon) then
+				Icons.setTransparency(self.ButtonIcon, transparency)
+			else
+				self.ButtonIcon.TextTransparency = transparency
+			end
 		end
 
 		return hasContent
@@ -3828,6 +3905,7 @@ __modules["Components/Window"] = function()
 	local Create = __require("Utils/Create")
 	local Tween = __require("Utils/Tween")
 	local Fade = __require("Utils/Fade")
+	local Icons = __require("Utils/Icons")
 	local Logo = __require("Core/Logo")
 	local Tab = __require("Components/Tab")
 
@@ -4095,16 +4173,9 @@ __modules["Components/Window"] = function()
 		self.SearchStroke = Create.stroke(self.SearchFrame, palette.Outline, 1, 0.35)
 		library:Styled(self.SearchStroke, "Outline", "Color")
 
-		self.SearchIcon = Create.label({
-			Name = "Icon",
-			Text = "⌕",
-			TextSize = 14,
-			Position = UDim2.fromOffset(7, 0),
-			Size = UDim2.fromOffset(14, 24),
-			ZIndex = 7,
-			Parent = self.SearchFrame,
-		})
-		library:Styled(self.SearchIcon, "Placeholder", "TextColor3")
+		self.SearchIcon = Icons.new("search", self.SearchFrame, 13, palette.Placeholder, 7)
+		self.SearchIcon.Position = UDim2.fromOffset(7, 5.5)
+		Icons.bindTheme(self.SearchIcon, library, "Placeholder")
 
 		self.SearchBox = Create.new("TextBox", {
 			Name = "Search",
@@ -4130,13 +4201,15 @@ __modules["Components/Window"] = function()
 			Size = UDim2.fromOffset(24, 24),
 			BackgroundColor3 = palette.SurfaceHigh,
 			BackgroundTransparency = 1,
-			Text = "✕",
-			TextSize = 13,
-			TextColor3 = palette.SubText,
+			Text = "",
 			ZIndex = 7,
 			Parent = self.Header,
 		})
 		Create.corner(self.CloseButton, 12)
+
+		self.CloseIcon = Icons.new("close", self.CloseButton, 12, palette.SubText, 8)
+		self.CloseIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+		self.CloseIcon.Position = UDim2.fromScale(0.5, 0.5)
 
 		-- Tab bar.
 		self.TabBar = Create.new("Frame", {
@@ -4347,6 +4420,21 @@ __modules["Components/Window"] = function()
 			self:Close()
 		end))
 
+		-- The close button reacts in the danger colour so it never looks like a
+		-- plain square: background tint, icon recolour, and a small scale pop.
+		self:_track(self.CloseButton.MouseEnter:Connect(function()
+			local palette = self.Library.Palette
+			Tween.play(self.CloseButton, { BackgroundTransparency = 0.8 }, Tween.Info.Fast)
+			Icons.setColor(self.CloseIcon, palette.Danger)
+			Icons.setSize(self.CloseIcon, 14, Tween.Info.Fast)
+		end))
+
+		self:_track(self.CloseButton.MouseLeave:Connect(function()
+			Tween.play(self.CloseButton, { BackgroundTransparency = 1 }, Tween.Info.Fast)
+			Icons.setColor(self.CloseIcon, self.Library.Palette.SubText)
+			Icons.setSize(self.CloseIcon, 12, Tween.Info.Fast)
+		end))
+
 		self:_track(self.CloseButton.MouseEnter:Connect(function()
 			Tween.play(self.CloseButton, {
 				BackgroundTransparency = 0.15,
@@ -4524,6 +4612,12 @@ __modules["Components/Window"] = function()
 			return nil
 		end
 
+		-- window:AddTab("Combat", function(tab) ... end) works too.
+		if type(icon) == "function" and builder == nil then
+			builder = icon
+			icon = nil
+		end
+
 		local tab = Tab.new(self.Library, self, {
 			Name = name,
 			Icon = icon,
@@ -4543,10 +4637,17 @@ __modules["Components/Window"] = function()
 		button.LayoutOrder = #self.Tabs
 		Create.corner(button, 5)
 
-		local hasIcon = type(icon) == "string" and icon ~= ""
+		-- Tab icons accept a friendly name / glyph ("combat", "◎", "🎯") that maps
+		-- to a drawn icon; anything else is rendered as text so plain labels and
+		-- emoji still work.
+		local kind = Icons.resolve(icon)
+		local hasIcon = kind ~= nil or (type(icon) == "string" and icon ~= "")
 		local offset = hasIcon and 26 or 8
 
-		if hasIcon then
+		if kind then
+			tab.ButtonIcon = Icons.new(kind, button, 15, palette.SubText, 7)
+			tab.ButtonIcon.Position = UDim2.fromOffset(7, 5.5)
+		elseif hasIcon then
 			tab.ButtonIcon = Create.label({
 				Name = "Icon",
 				Text = icon,
@@ -4629,9 +4730,13 @@ __modules["Components/Window"] = function()
 		}, info)
 
 		if tab.ButtonIcon then
-			Tween.play(tab.ButtonIcon, {
-				TextColor3 = active and palette.Primary or palette.SubText,
-			}, info)
+			local color = active and palette.Primary or palette.SubText
+
+			if Icons.isIcon(tab.ButtonIcon) then
+				Icons.setColor(tab.ButtonIcon, color)
+			else
+				Tween.play(tab.ButtonIcon, { TextColor3 = color }, info)
+			end
 		end
 
 		Tween.play(tab.Indicator, {
@@ -4962,13 +5067,16 @@ end
 __modules["Core/Cursor"] = function()
 	--[[
 		Core/Cursor.lua
-		The Cherry UI pointer.
+		The Cherry pointer: a stroke-drawn arrow with a cherry badge.
 
-		Roblox cannot change the operating-system cursor from a LocalScript, so the
-		supported route is to hide the default one (`UserInputService.MouseIconEnabled
-		= false`) and draw our own. This cursor is built from GuiObjects like the rest
-		of the library, which means it needs no uploaded image asset, recolors with
-		the active theme, and stays crisp at any resolution.
+		Roblox cannot set an operating-system cursor from a LocalScript and there is
+		no way to ship an uploaded image with a library, so the supported route is to
+		hide the default pointer (`UserInputService.MouseIconEnabled = false`) and
+		draw our own. Everything here is GuiObjects, so it needs no asset id, recolors
+		with the active theme, and stays crisp at any resolution.
+
+		The arrow tip sits exactly at the frame's origin, which makes the hotspot
+		(0, 0): the pointer lands where the user is actually aiming.
 
 		Modes (see `CherryUI:SetCursorMode`):
 		  * "always" - replaces the Roblox pointer as soon as the library loads (default)
@@ -4976,11 +5084,11 @@ __modules["Core/Cursor"] = function()
 		  * "off"    - never; the Roblox cursor is left alone
 
 		The cursor also survives mouse-lock changes: `Refresh` re-runs whenever
-		MouseBehavior flips, so unlocking the mouse brings the cherry back without
+		MouseBehavior flips, so unlocking the mouse brings the pointer back without
 		waiting for the menu to be opened or closed.
 
-		Cost: the follow loop is a single RenderStepped connection that exists only
-		while the cursor is actually visible.
+		Cost: one RenderStepped connection that exists only while the cursor is
+		actually visible.
 	]]
 
 	local GuiService = game:GetService("GuiService")
@@ -4988,16 +5096,22 @@ __modules["Core/Cursor"] = function()
 	local UserInputService = game:GetService("UserInputService")
 
 	local Create = __require("Utils/Create")
+	local Icons = __require("Utils/Icons")
 	local Tween = __require("Utils/Tween")
 
 	local Cursor = {}
 	Cursor.__index = Cursor
 
-	local SIZE = 24
+	local FRAME = 32
+	local ARROW = 24
+	-- Design-grid point the arrow tip lives at inside Core/Icons' "cursor" kind.
+	local ARROW_TIP = Vector2.new(4.5, 1.5)
+
 	local MODES = { menu = true, always = true, off = true }
-	local STEM_COLOR = Color3.fromHex("4ADE80")
 	local LEAF_DARK = Color3.fromHex("22C55E")
 	local LEAF_LIGHT = Color3.fromHex("A7F3D0")
+	local STEM_COLOR = Color3.fromHex("4ADE80")
+	local BACKING = Color3.fromHex("0B0B0D")
 
 	local function topbarInset()
 		local ok, inset = pcall(function()
@@ -5026,7 +5140,7 @@ __modules["Core/Cursor"] = function()
 		self.Frame = Create.new("Frame", {
 			Name = "CherryCursor",
 			AnchorPoint = Vector2.new(0, 0),
-			Size = UDim2.fromOffset(SIZE, SIZE),
+			Size = UDim2.fromOffset(FRAME, FRAME),
 			BackgroundTransparency = 1,
 			Visible = false,
 			ZIndex = 5000,
@@ -5036,55 +5150,45 @@ __modules["Core/Cursor"] = function()
 		-- Soft shadow so the pointer reads on light and dark backgrounds alike.
 		local shadow = Create.new("Frame", {
 			Name = "Shadow",
-			Position = UDim2.fromOffset(7, 9),
-			Size = UDim2.fromOffset(14, 13),
+			Position = UDim2.fromOffset(3, 4),
+			Size = UDim2.fromOffset(22, 21),
 			BackgroundColor3 = Color3.new(0, 0, 0),
-			BackgroundTransparency = 0.62,
+			BackgroundTransparency = 0.6,
 			ZIndex = 1,
 			Parent = self.Frame,
 		})
 		Create.corner(shadow, UDim.new(1, 0))
 
-		-- Stems and leaf (drawn first so the cherries overlap them).
-		for _, stemData in ipairs({
-			{ X = 10, Y = 1, Height = 8, Rotation = 26 },
-			{ X = 14, Y = 1, Height = 7, Rotation = -16 },
-		}) do
-			local stem = Create.new("Frame", {
-				Name = "Stem",
-				Position = UDim2.fromOffset(stemData.X, stemData.Y),
-				Size = UDim2.new(0, 2, 0, stemData.Height),
-				BackgroundColor3 = STEM_COLOR,
-				Rotation = stemData.Rotation,
-				ZIndex = 2,
-				Parent = self.Frame,
-			})
-			Create.corner(stem, UDim.new(0.5, 0))
-		end
+		-- The arrow: a translucent dark copy sits behind the white one so the
+		-- outline stays readable over dark panels without a second asset.
+		local scale = ARROW / Icons.Grid
+		local tipOffset = UDim2.fromOffset(-ARROW_TIP.X * scale, -ARROW_TIP.Y * scale)
 
-		local leaf = Create.new("Frame", {
-			Name = "Leaf",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromOffset(16, 3),
-			Size = UDim2.fromOffset(9, 5),
-			Rotation = -24,
-			ZIndex = 2,
+		local backing = Icons.new("cursor", self.Frame, ARROW + 3, BACKING, 2)
+		backing.Position = tipOffset
+		Icons.setTransparency(backing, 0.45)
+
+		local arrow = Icons.new("cursor", self.Frame, ARROW, Color3.fromHex("FFFFFF"), 3)
+		arrow.Position = tipOffset
+
+		-- Cherry badge tucked under the arrow head, so the pointer is unmistakably
+		-- Cherry UI while still reading as an arrow.
+		local badge = Create.new("Frame", {
+			Name = "Badge",
+			Position = UDim2.fromOffset(13, 15),
+			Size = UDim2.fromOffset(18, 17),
+			BackgroundTransparency = 1,
+			ZIndex = 4,
 			Parent = self.Frame,
 		})
-		Create.corner(leaf, UDim.new(1, 0))
-		Create.new("UIGradient", {
-			Rotation = 40,
-			Color = ColorSequence.new(LEAF_DARK, LEAF_LIGHT),
-			Parent = leaf,
-		})
 
-		local function cherry(position, size)
+		local function cherry(position, size, zIndex)
 			local berry = Create.new("Frame", {
 				Name = "Cherry",
 				Position = position,
 				Size = UDim2.fromOffset(size, size),
-				ZIndex = 3,
-				Parent = self.Frame,
+				ZIndex = zIndex,
+				Parent = badge,
 			})
 			Create.corner(berry, UDim.new(1, 0))
 			library.ThemeManager:BindGradient(
@@ -5102,7 +5206,7 @@ __modules["Core/Cursor"] = function()
 				BackgroundColor3 = Color3.new(1, 1, 1),
 				BackgroundTransparency = 0.45,
 				Rotation = -20,
-				ZIndex = 4,
+				ZIndex = zIndex + 1,
 				Parent = berry,
 			})
 			Create.corner(shine, UDim.new(1, 0))
@@ -5110,8 +5214,35 @@ __modules["Core/Cursor"] = function()
 			return berry
 		end
 
-		cherry(UDim2.fromOffset(3, 9), 12)
-		cherry(UDim2.fromOffset(13, 12), 10.5)
+		local stem = Create.new("Frame", {
+			Name = "Stem",
+			Position = UDim2.fromOffset(9, 1),
+			Size = UDim2.new(0, 1.6, 0, 6),
+			BackgroundColor3 = STEM_COLOR,
+			Rotation = 28,
+			ZIndex = 4,
+			Parent = badge,
+		})
+		Create.corner(stem, UDim.new(0.5, 0))
+
+		local leaf = Create.new("Frame", {
+			Name = "Leaf",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromOffset(12, 3),
+			Size = UDim2.fromOffset(8, 4.5),
+			Rotation = -24,
+			ZIndex = 4,
+			Parent = badge,
+		})
+		Create.corner(leaf, UDim.new(1, 0))
+		Create.new("UIGradient", {
+			Rotation = 40,
+			Color = ColorSequence.new(LEAF_DARK, LEAF_LIGHT),
+			Parent = leaf,
+		})
+
+		cherry(UDim2.fromOffset(2, 7), 11, 5)
+		cherry(UDim2.fromOffset(11, 10), 9, 6)
 
 		-- Shift-lock / first person hides the pointer; leaving it must restore it
 		-- even when no window was opened in between.
@@ -5147,6 +5278,7 @@ __modules["Core/Cursor"] = function()
 		return window ~= nil and window.Visible == true and not window.Destroyed
 	end
 
+	-- The arrow tip is the frame origin, so no hotspot offset is needed.
 	function Cursor:_follow()
 		local position = self:_mousePosition()
 		self.Frame.Position = UDim2.fromOffset(position.X, position.Y)
@@ -5178,8 +5310,6 @@ __modules["Core/Cursor"] = function()
 					end
 				end)
 			end
-
-			Tween.play(self.Frame, { Size = UDim2.fromOffset(SIZE, SIZE) }, Tween.Info.Snap)
 		else
 			if self._connection then
 				self._connection:Disconnect()
@@ -6720,6 +6850,500 @@ __modules["Utils/Fade"] = function()
 	return Fade
 end
 
+__modules["Utils/Icons"] = function()
+	--[[
+		Utils/Icons.lua
+		Crisp, themeable icons drawn entirely from GuiObjects.
+
+		Why not text glyphs? Roblox's default fonts have no coverage for the
+		"dingbat" range (⌕ ✕ ▾ ✓ ◉ …), so those characters render as tofu boxes.
+		Uploaded images are not an option either: a drop-in library cannot ship
+		asset IDs. Every icon here is composed from a few rounded Frames instead,
+		which means it is font-independent, stays sharp at any size, recolors with
+		the theme, and animates (rotation, transparency) like any other instance.
+
+		Icons are designed once on a 20x20 grid and scaled to the requested size, so
+		the same drawing drives a 12px dropdown check and the 24px cursor arrow.
+
+			Icons.new("target", parent, 16, palette.Primary)
+			Icons.setColor(icon, palette.SubText)
+			Icons.setTransparency(icon, 0.5)   -- used by tab dimming
+	]]
+
+	local Create = __require("Utils/Create")
+	local Tween = __require("Utils/Tween")
+
+	local Icons = {}
+
+	-- The design grid every builder draws on.
+	Icons.Grid = 20
+
+	-- frame -> { Parts = { { Instance, Color, Transparency } }, Size = n } (weak keys)
+	local Registry = setmetatable({}, { __mode = "k" })
+
+	--[[
+		A single recolorable part. `color` and `transparency` are the property names
+		to write, so one record serves Frames (BackgroundColor3/BackgroundTransparency)
+		and strokes (Color/Transparency) alike.
+	]]
+	local function part(parts, instance, colorProperty, transparencyProperty, color)
+		if colorProperty then
+			instance[colorProperty] = color
+		end
+
+		table.insert(parts, {
+			Instance = instance,
+			Color = colorProperty,
+			Transparency = transparencyProperty,
+		})
+
+		return instance
+	end
+
+	--------------------------------------------------------------------------
+	-- Primitives (each registers what it draws)
+	--------------------------------------------------------------------------
+
+	--[[
+		A rounded stroke between two points on the design grid.
+		One rotated bar beats stacking axis-aligned ones, which leave notches at the
+		joints. Used for every diagonal: checks, chevrons, the cursor arrow.
+	]]
+	function Icons.line(parts, parent, x1, y1, x2, y2, thickness, color, zIndex)
+		local dx, dy = x2 - x1, y2 - y1
+		local length = math.sqrt(dx * dx + dy * dy)
+
+		local bar = Create.new("Frame", {
+			Name = "Line",
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.fromOffset(x1, y1),
+			Size = UDim2.fromOffset(length, thickness),
+			Rotation = math.deg(math.atan2(dy, dx)),
+			ZIndex = zIndex or 3,
+			Parent = parent,
+		})
+		Create.corner(bar, UDim.new(0.5, 0))
+
+		return part(parts, bar, "BackgroundColor3", "BackgroundTransparency", color)
+	end
+
+	-- A stroke-only circle/ellipse (UICorner 1 makes any size an ellipse).
+	function Icons.ring(parts, parent, x, y, width, height, thickness, color, zIndex)
+		local ring = Create.new("Frame", {
+			Name = "Ring",
+			Position = UDim2.fromOffset(x, y),
+			Size = UDim2.fromOffset(width, height),
+			BackgroundTransparency = 1,
+			ZIndex = zIndex or 2,
+			Parent = parent,
+		})
+		Create.corner(ring, UDim.new(1, 0))
+
+		local stroke = Create.new("UIStroke", {
+			Thickness = thickness,
+			Parent = ring,
+		})
+
+		return part(parts, stroke, "Color", "Transparency", color)
+	end
+
+	function Icons.dot(parts, parent, x, y, size, color, zIndex)
+		local dot = Create.new("Frame", {
+			Name = "Dot",
+			Position = UDim2.fromOffset(x, y),
+			Size = UDim2.fromOffset(size, size),
+			ZIndex = zIndex or 4,
+			Parent = parent,
+		})
+		Create.corner(dot, UDim.new(1, 0))
+
+		return part(parts, dot, "BackgroundColor3", "BackgroundTransparency", color)
+	end
+
+	-- A rotated square: the cheapest solid diamond.
+	function Icons.diamond(parts, parent, x, y, size, radius, color, zIndex)
+		local shape = Create.new("Frame", {
+			Name = "Diamond",
+			Position = UDim2.fromOffset(x, y),
+			Size = UDim2.fromOffset(size, size),
+			Rotation = 45,
+			ZIndex = zIndex or 2,
+			Parent = parent,
+		})
+		Create.corner(shape, radius or UDim.new(0, 2))
+
+		return part(parts, shape, "BackgroundColor3", "BackgroundTransparency", color)
+	end
+
+	-- A stroke-only rounded rectangle (used by "layers" and "copy").
+	function Icons.outline(parts, parent, x, y, width, height, radius, thickness, color, zIndex)
+		local shape = Create.new("Frame", {
+			Name = "Outline",
+			Position = UDim2.fromOffset(x, y),
+			Size = UDim2.fromOffset(width, height),
+			BackgroundTransparency = 1,
+			ZIndex = zIndex or 2,
+			Parent = parent,
+		})
+		Create.corner(shape, radius)
+
+		local stroke = Create.new("UIStroke", {
+			Thickness = thickness,
+			Parent = shape,
+		})
+
+		return part(parts, stroke, "Color", "Transparency", color)
+	end
+
+	--------------------------------------------------------------------------
+	-- Builders: one per icon kind, each draws at `color` on the canvas
+	--------------------------------------------------------------------------
+
+	local BUILDERS = {}
+
+	BUILDERS.target = function(parts, color, canvas)
+		Icons.ring(parts, canvas, 5, 5, 10, 10, 1.8, color)
+		Icons.line(parts, canvas, 10, 1, 10, 4, 1.8, color)
+		Icons.line(parts, canvas, 10, 16, 10, 19, 1.8, color)
+		Icons.line(parts, canvas, 1, 10, 4, 10, 1.8, color)
+		Icons.line(parts, canvas, 16, 10, 19, 10, 1.8, color)
+		Icons.dot(parts, canvas, 8.6, 8.6, 2.8, color)
+	end
+
+	BUILDERS.eye = function(parts, color, canvas)
+		Icons.ring(parts, canvas, 2, 6, 16, 8, 1.8, color)
+		Icons.dot(parts, canvas, 8, 8, 4, color)
+	end
+
+	BUILDERS.layers = function(parts, color, canvas)
+		Icons.outline(parts, canvas, 5, 2, 10, 10, UDim.new(0, 2), 1.8, color, 2)
+		Icons.outline(parts, canvas, 5, 8.5, 10, 10, UDim.new(0, 2), 1.8, color, 3)
+	end
+
+	BUILDERS.players = function(parts, color, canvas)
+		Icons.ring(parts, canvas, 7, 1.5, 6, 6, 1.8, color)
+		Icons.outline(parts, canvas, 3, 11, 14, 7, UDim.new(0.5, 0), 1.8, color, 2)
+	end
+
+	BUILDERS.settings = function(parts, color, canvas)
+		for _, row in ipairs({
+			{ Y = 6, Knob = 12 },
+			{ Y = 10, Knob = 6 },
+			{ Y = 14, Knob = 14 },
+		}) do
+			Icons.line(parts, canvas, 3, row.Y, 17, row.Y, 1.6, color)
+			Icons.dot(parts, canvas, row.Knob - 2.1, row.Y - 2.1, 4.2, color)
+		end
+	end
+
+	BUILDERS.search = function(parts, color, canvas)
+		Icons.ring(parts, canvas, 2.5, 2.5, 11, 11, 1.8, color)
+		Icons.line(parts, canvas, 12, 12, 17.5, 17.5, 1.8, color)
+	end
+
+	BUILDERS.close = function(parts, color, canvas)
+		Icons.line(parts, canvas, 4.5, 4.5, 15.5, 15.5, 1.8, color)
+		Icons.line(parts, canvas, 15.5, 4.5, 4.5, 15.5, 1.8, color)
+	end
+
+	BUILDERS.check = function(parts, color, canvas)
+		Icons.line(parts, canvas, 3.5, 10.5, 8, 15, 1.9, color)
+		Icons.line(parts, canvas, 8, 15, 16.5, 4.5, 1.9, color)
+	end
+
+	-- Points down at rotation 0; the dropdown rotates it 180 degrees when open.
+	BUILDERS.chevron = function(parts, color, canvas)
+		Icons.line(parts, canvas, 4.5, 7.5, 10, 13, 1.9, color)
+		Icons.line(parts, canvas, 10, 13, 15.5, 7.5, 1.9, color)
+	end
+
+	BUILDERS.refresh = function(parts, color, canvas)
+		Icons.ring(parts, canvas, 3.5, 3.5, 13, 13, 1.8, color)
+		Icons.line(parts, canvas, 12.5, 1.8, 17.2, 1.8, 1.8, color)
+		Icons.line(parts, canvas, 17.2, 1.8, 17.2, 6.5, 1.8, color)
+	end
+
+	BUILDERS.copy = function(parts, color, canvas)
+		Icons.outline(parts, canvas, 3, 2, 9, 11, UDim.new(0, 2), 1.6, color, 2)
+		Icons.outline(parts, canvas, 8, 7, 9, 11, UDim.new(0, 2), 1.6, color, 3)
+	end
+
+	BUILDERS.diamond = function(parts, color, canvas)
+		Icons.diamond(parts, canvas, 5, 5, 10, UDim.new(0, 2), color)
+	end
+
+	BUILDERS.info = function(parts, color, canvas)
+		Icons.ring(parts, canvas, 2, 2, 16, 16, 1.8, color)
+		Icons.dot(parts, canvas, 8.9, 5.5, 2.4, color)
+		Icons.line(parts, canvas, 10, 9.5, 10, 14.5, 1.8, color)
+	end
+
+	BUILDERS.warning = function(parts, color, canvas)
+		Icons.ring(parts, canvas, 2, 2, 16, 16, 1.8, color)
+		Icons.line(parts, canvas, 10, 6, 10, 11.5, 1.8, color)
+		Icons.dot(parts, canvas, 8.9, 13.2, 2.4, color)
+	end
+
+	BUILDERS.success = function(parts, color, canvas)
+		Icons.ring(parts, canvas, 2, 2, 16, 16, 1.8, color)
+		Icons.line(parts, canvas, 6, 10.5, 9, 13.5, 1.8, color)
+		Icons.line(parts, canvas, 9, 13.5, 14.5, 6.5, 1.8, color)
+	end
+
+	BUILDERS.error = function(parts, color, canvas)
+		Icons.ring(parts, canvas, 2, 2, 16, 16, 1.8, color)
+		Icons.line(parts, canvas, 7, 7, 13, 13, 1.8, color)
+		Icons.line(parts, canvas, 13, 7, 7, 13, 1.8, color)
+	end
+
+	-- The pointer arrow used by Core/Cursor.lua: a stroke-drawn arrowhead plus a
+	-- tail. Drawn rather than textured so it never depends on an asset id.
+	BUILDERS.cursor = function(parts, color, canvas)
+		Icons.line(parts, canvas, 4.5, 1.5, 4.5, 14.5, 1.9, color)
+		Icons.line(parts, canvas, 4.5, 1.5, 11, 12, 1.9, color)
+		Icons.line(parts, canvas, 4.5, 14.5, 11, 12, 1.9, color)
+		Icons.line(parts, canvas, 11, 12, 13.5, 18.5, 2.4, color)
+	end
+
+	--------------------------------------------------------------------------
+	-- Aliases: friendly names, the old glyphs (existing scripts keep working) and
+	-- the emoji people tend to type.
+	--------------------------------------------------------------------------
+
+	local ALIASES = {
+		target = "target",
+		crosshair = "target",
+		aim = "target",
+		aimbot = "target",
+		combat = "target",
+		["◎"] = "target",
+		["🎯"] = "target",
+
+		layers = "layers",
+		visuals = "layers",
+		esp = "layers",
+		render = "layers",
+		["◈"] = "layers",
+		["🧊"] = "layers",
+
+		players = "players",
+		player = "players",
+		list = "players",
+		people = "players",
+		["☰"] = "players",
+		["👥"] = "players",
+
+		settings = "settings",
+		config = "settings",
+		gear = "settings",
+		options = "settings",
+		["⚙"] = "settings",
+		["⚙️"] = "settings",
+
+		eye = "eye",
+		spectate = "eye",
+		info = "info",
+		["◉"] = "eye",
+		["👁"] = "eye",
+
+		search = "search",
+		["⌕"] = "search",
+		["🔍"] = "search",
+
+		close = "close",
+		["✕"] = "close",
+		["×"] = "close",
+		["✗"] = "close",
+
+		check = "check",
+		["✓"] = "check",
+		["✔"] = "check",
+
+		chevron = "chevron",
+		["▾"] = "chevron",
+		["▿"] = "chevron",
+
+		refresh = "refresh",
+		reload = "refresh",
+		rescan = "refresh",
+		["⟳"] = "refresh",
+		["↻"] = "refresh",
+
+		copy = "copy",
+		clipboard = "copy",
+		["⧉"] = "copy",
+
+		diamond = "diamond",
+		notification = "diamond",
+		["◆"] = "diamond",
+
+		warning = "warning",
+		["⚠"] = "warning",
+		danger = "error",
+		error = "error",
+		success = "success",
+
+		cursor = "cursor",
+		arrow = "cursor",
+		pointer = "cursor",
+	}
+
+	-- Maps a glyph / friendly name / kind to a drawable kind, or nil when the
+	-- string should be rendered as text (a plain letter or an emoji we don't draw).
+	function Icons.resolve(icon)
+		if type(icon) ~= "string" then
+			return nil
+		end
+
+		local kind = ALIASES[icon]
+		if kind and BUILDERS[kind] then
+			return kind
+		end
+
+		return nil
+	end
+
+	--------------------------------------------------------------------------
+	-- Public API
+	--------------------------------------------------------------------------
+
+	--[[
+		Builds an icon.
+		    kind   - a key from ALIASES / BUILDERS ("target", "close", "cursor", …)
+		    parent - parent instance
+		    size   - rendered size in pixels (default 16)
+		    color  - single colour for every part
+	]]
+	function Icons.new(kind, parent, size, color, zIndex)
+		size = size or 16
+		color = color or Color3.new(1, 1, 1)
+		zIndex = zIndex or 5
+
+		local root = Create.new("Frame", {
+			Name = "Icon_" .. tostring(kind),
+			Size = UDim2.fromOffset(size, size),
+			BackgroundTransparency = 1,
+			ZIndex = zIndex,
+			Parent = parent,
+		})
+
+		--[[
+			The design canvas is 20x20 and a UIScale maps it to the requested size.
+			The UIScale sits on the *canvas*, not on the root: UIScale scales the
+			GuiObject it is a child of, so hanging it on the root would shrink the
+			root's own box and throw off any AnchorPoint-based centering.
+		]]
+		local canvas = Create.new("Frame", {
+			Name = "Canvas",
+			Size = UDim2.fromOffset(Icons.Grid, Icons.Grid),
+			BackgroundTransparency = 1,
+			ZIndex = zIndex,
+			Parent = root,
+		})
+
+		local scale = Create.new("UIScale", { Scale = size / Icons.Grid, Parent = canvas })
+
+		local parts = {}
+		local builder = BUILDERS[kind]
+
+		if builder then
+			builder(parts, color, canvas)
+		else
+			warn("[CherryUI] Unknown icon kind: " .. tostring(kind))
+		end
+
+		Registry[root] = {
+			Parts = parts,
+			Canvas = canvas,
+			Scale = scale,
+			Size = size,
+		}
+
+		return root
+	end
+
+	--[[
+		Resizes a drawn icon. The drawing lives on a fixed 20x20 design grid that a
+		UIScale maps onto the requested size, so both have to move together; passing
+		tween info animates the change (used for the close button hover pop).
+	]]
+	function Icons.setSize(icon, size, info)
+		local entry = Registry[icon]
+		if not entry then
+			return icon
+		end
+
+		entry.Size = size
+
+		local rootSize = UDim2.fromOffset(size, size)
+		local target = { Scale = size / Icons.Grid }
+
+		if info then
+			Tween.play(entry.Scale, target, info)
+			Tween.play(icon, { Size = rootSize }, info)
+		else
+			entry.Scale.Scale = target.Scale
+			icon.Size = rootSize
+		end
+
+		return icon
+	end
+
+	-- Recolors every part of a drawn icon.
+	function Icons.setColor(icon, color)
+		local entry = Registry[icon]
+		if not entry then
+			return icon
+		end
+
+		for _, item in ipairs(entry.Parts) do
+			if item.Color then
+				item.Instance[item.Color] = color
+			end
+		end
+
+		return icon
+	end
+
+	-- Fades a drawn icon (0 = solid, 1 = invisible) and hides it entirely at 1.
+	function Icons.setTransparency(icon, transparency)
+		local entry = Registry[icon]
+		if not entry then
+			return icon
+		end
+
+		for _, item in ipairs(entry.Parts) do
+			if item.Transparency then
+				item.Instance[item.Transparency] = transparency
+			end
+		end
+
+		return icon
+	end
+
+	-- Keeps every part of an icon in sync with a theme token ("Primary", "SubText").
+	function Icons.bindTheme(icon, library, token)
+		local entry = Registry[icon]
+		if not entry then
+			return icon
+		end
+
+		for _, item in ipairs(entry.Parts) do
+			if item.Color then
+				library.ThemeManager:Bind(item.Instance, item.Color, token)
+			end
+		end
+
+		return icon
+	end
+
+	function Icons.isIcon(instance)
+		return Registry[instance] ~= nil
+	end
+
+	return Icons
+end
+
 __modules["Utils/Pool"] = function()
 	--[[
 		Utils/Pool.lua
@@ -7432,8 +8056,8 @@ __modules["init"] = function()
 
 			local CherryUI = require(ReplicatedStorage.CherryUI)
 			local window = CherryUI:CreateWindow({ Title = "Cherry" })
-			local tab = window:AddTab("Combat", "◎")
-			tab:AddSection("Aimbot"):AddToggle({ Name = "Enable Aimbot" })
+		local tab = window:AddTab("Combat", "target")
+		tab:AddSection("Aimbot"):AddToggle({ Name = "Enable Aimbot" })
 
 		The module deliberately owns a single ScreenGui (created on first use), one
 		Heartbeat scheduler and one theme manager, no matter how many windows the
@@ -7448,6 +8072,11 @@ __modules["init"] = function()
 	local Signal = __require("Utils/Signal")
 	local Scheduler = __require("Utils/Scheduler")
 	local Util = __require("Utils/Util")
+	local Tween = __require("Utils/Tween")
+	local Fade = __require("Utils/Fade")
+	local Icons = __require("Utils/Icons")
+	local Pool = __require("Utils/Pool")
+	local Popup = __require("Utils/Popup")
 	local ConfigManager = __require("Utils/Config")
 	local ThemeManager = __require("Core/ThemeManager")
 	local Cursor = __require("Core/Cursor")
@@ -7472,6 +8101,23 @@ __modules["init"] = function()
 		local self = setmetatable({}, Library)
 
 		self.Version = "1.0.0"
+
+		--[[
+			Exposed so scripts built on Cherry UI can reuse the same motion, pooling
+			and icon language instead of writing their own:
+				CherryUI.Icons.new("target", frame, 18, CherryUI.Palette.Primary)
+				CherryUI.Pool.new(create, reset)
+				CherryUI.Tween.play(frame, { BackgroundTransparency = 0 }, CherryUI.Tween.Info.Fast)
+		]]
+		self.Create = Create
+		self.Signal = Signal
+		self.Tween = Tween
+		self.Fade = Fade
+		self.Icons = Icons
+		self.Pool = Pool
+		self.Popup = Popup
+		self.Util = Util
+
 		self.Themes = Themes
 		self.ThemeOrder = THEME_ORDER
 		self.Windows = {}
@@ -7514,18 +8160,44 @@ __modules["init"] = function()
 		return self.ThemeManager:Bind(instance, property, token)
 	end
 
+	--[[
+		Marks that a Keybind control is waiting for a key. The timestamp lets the
+		input handler release a capture that was abandoned (window closed mid-capture,
+		focus stolen) instead of leaving the menu toggle dead forever.
+	]]
+	function Library:SetCapturing(capturing)
+		self.Capturing = capturing and true or false
+		self._captureStarted = os.clock()
+	end
+
+	-- How long an unfinished keybind capture may block the menu toggle.
+	local CAPTURE_TIMEOUT = 5
+
 	function Library:_bindInput()
 		self._inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-			if gameProcessed or self.Capturing then
-				return
+			if self.Capturing then
+				-- Keybind capture owns the keyboard, but only for a moment: a capture
+				-- that never received a key must not swallow the toggle key.
+				if os.clock() - (self._captureStarted or 0) < CAPTURE_TIMEOUT then
+					return
+				end
+
+				self:SetCapturing(false)
 			end
 
-			if UserInputService:GetFocusedTextBox() then
-				return
-			end
-
+			--[[
+				The toggle key is checked *before* the gameProcessed bail-out.
+				RightShift is a modifier: on some clients it arrives with gameProcessed
+				set, and any focused TextBox (the settings search box is a TextBox) used
+				to disable the toggle entirely. A menu key must always work, so nothing
+				short of an active keybind capture gets to block it.
+			]]
 			if Util.matchesInput(input, self.ToggleKey) then
 				self:ToggleUI()
+				return
+			end
+
+			if gameProcessed then
 				return
 			end
 
@@ -7721,6 +8393,20 @@ __modules["init"] = function()
 
 	function Library:ToggleUI()
 		local window = self.PrimaryWindow
+
+		-- Recover when the primary window was destroyed: toggle any live window so
+		-- the keybind keeps working instead of going quiet.
+		if not window or window.Destroyed then
+			window = nil
+			for candidate in self.Windows do
+				if not candidate.Destroyed then
+					window = candidate
+					self.PrimaryWindow = candidate
+					break
+				end
+			end
+		end
+
 		if window and not window.Destroyed then
 			window:Toggle()
 		end

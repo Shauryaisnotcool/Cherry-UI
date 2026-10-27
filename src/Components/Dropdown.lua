@@ -11,6 +11,7 @@
 local Base = require(script.Parent.Parent.Utils.Base)
 local Create = require(script.Parent.Parent.Utils.Create)
 local Tween = require(script.Parent.Parent.Utils.Tween)
+local Icons = require(script.Parent.Parent.Utils.Icons)
 local Pool = require(script.Parent.Parent.Utils.Pool)
 local Popup = require(script.Parent.Parent.Utils.Popup)
 
@@ -91,19 +92,10 @@ function Dropdown.new(library, section, config)
 		Parent = self.Hit,
 	})
 
-	self.Chevron = Create.label({
-		Name = "Chevron",
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -10, 0.5, 0),
-		Size = UDim2.fromOffset(12, 12),
-		Text = "▾",
-		TextSize = 12,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		TextYAlignment = Enum.TextYAlignment.Center,
-		ZIndex = 3,
-		Parent = self.Hit,
-	})
-	library:Styled(self.Chevron, "SubText", "TextColor3")
+	self.Chevron = Icons.new("chevron", self.Hit, 12, library.Palette.SubText, 3)
+	self.Chevron.AnchorPoint = Vector2.new(1, 0.5)
+	self.Chevron.Position = UDim2.new(1, -10, 0.5, 0)
+	Icons.bindTheme(self.Chevron, library, "SubText")
 
 	self:_renderField()
 
@@ -204,17 +196,10 @@ function Dropdown:_ensureMenu()
 		Create.corner(option, 6)
 		Create.padding(option, 0, 8, 0, 10)
 
-		local check = Create.label({
-			Name = "Check",
-			Text = "✓",
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -9, 0.5, 0),
-			Size = UDim2.fromOffset(14, 14),
-			TextSize = 11,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			Visible = false,
-			Parent = option,
-		})
+		local check = Icons.new("check", option, 13, self.Library.Palette.Primary, 4)
+		check.AnchorPoint = Vector2.new(1, 0.5)
+		check.Position = UDim2.new(1, -9, 0.5, 0)
+		check.Visible = false
 
 		self._widgets[option] = { Check = check }
 
@@ -272,7 +257,7 @@ function Dropdown:_renderOptions()
 		button.BackgroundTransparency = selected and 0.75 or 1
 
 		widgets.Check.Visible = selected
-		widgets.Check.TextColor3 = palette.Primary
+		Icons.setColor(widgets.Check, palette.Primary)
 
 		table.insert(self._rendered, { Button = button })
 	end

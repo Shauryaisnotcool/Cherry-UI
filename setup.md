@@ -108,7 +108,7 @@ Executors cannot `require` a ModuleScript tree, so use the pre-built bundle:
    local CherryUI = getgenv().CherryUI
 
    local Window = CherryUI:CreateWindow({ Title = "Cherry", Subtitle = "FPS Suite" })
-   Window:AddTab("Combat", "◎", function(tab)
+   Window:AddTab("Combat", "target", function(tab)
        tab:AddSection("Aimbot"):AddToggle({ Name = "Enable Aimbot" })
    end)
    ```
@@ -148,7 +148,7 @@ local Window = CherryUI:CreateWindow({
     Subtitle = "FPS Suite",
 })
 
-local Tab = Window:AddTab("Combat", "◎")
+local Tab = Window:AddTab("Combat", "target")
 local Section = Tab:AddSection("Aimbot")
 
 Section:AddToggle({
@@ -208,7 +208,7 @@ CherryUI:CreateWindow({
 Tabs can be built eagerly:
 
 ```lua
-local visuals = Window:AddTab("Visuals", "◈")
+local visuals = Window:AddTab("Visuals", "layers")
 visuals:AddSection("Player ESP"):AddToggle({ Name = "Enabled" })
 ```
 
@@ -216,7 +216,7 @@ visuals:AddSection("Player ESP"):AddToggle({ Name = "Enabled" })
 opened:
 
 ```lua
-Window:AddTab("Visuals", "◈", function(tab)
+Window:AddTab("Visuals", "layers", function(tab)
     -- runs on first open (and when a search forces the tab to build)
     local section = tab:AddSection("Player ESP")
     section:AddToggle({ Name = "Enabled" })
@@ -376,7 +376,7 @@ CherryUI.ThemeManager:BindGradient(myGradient, { "Primary", "Accent" })
 CherryUI:Notify({
     Title = "Injected",
     Content = "Cherry UI loaded successfully.",
-    Icon = "✓",              -- glyph, or an rbxassetid:// image
+    Icon = "success",        -- drawn icon name, emoji, or an rbxassetid:// image
     Type = "success",        -- "info" | "success" | "warning" | "error"
     Duration = 5,            -- seconds (hover pauses the timer)
 })
@@ -476,7 +476,7 @@ reappear by accident.
 | --- | --- |
 | Nothing appears | The script must be a LocalScript on the client. Check the Output window for `[CherryUI]` warnings. |
 | `attempt to index nil with 'Create'` | The module tree is wrong. Folder and ModuleScript names must match the README structure exactly. |
-| Menu does not toggle with RightShift | Another script may be consuming input, or focus is inside a text box. Rebind via `CherryUI:SetToggleKey`, and check `UserInputService`. |
+| Menu does not toggle with RightShift | The toggle key is handled before `gameProcessed` and is not blocked by focused text boxes, so the usual cause is Studio's **Run** (F8) mode or a server `Script` — use **Play** (F5), a LocalScript, or an executor. Also rebuild a stale `dist/CherryUI.lua` (`python3 tools/bundle.py`). Rebind with `CherryUI:SetToggleKey`, or toggle in code with `CherryUI:ToggleUI()`. |
 | Keybind shows "None" | Bindings accept `Enum.KeyCode` and the three mouse buttons; other input types are ignored. |
 | UI is too large / small | Resize the window from the bottom-right grip, or change `Size` in `CreateWindow`. The whole window also scales with viewport size. |
 | No cherry cursor | The library builds the ScreenGui when it runs on the client. Require it from a LocalScript (or paste the bundle); in Studio edit mode nothing is created. Check `CherryUI:GetCursorMode()` is not `"off"`. |
@@ -503,7 +503,7 @@ screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 local button = Instance.new("TextButton")
 button.Size = UDim2.fromOffset(44, 44)
 button.Position = UDim2.new(0, 12, 0, 60)
-button.Text = "◈"
+CherryUI.Icons.new("layers", button, 18, CherryUI.Palette.Primary)
 button.Parent = screenGui
 button.Activated:Connect(function()
     CherryUI:ToggleUI()
@@ -513,6 +513,9 @@ end)
 ---
 
 ## 7. API cheat sheet
+
+The short version is below; **[API.md](API.md)** is the complete reference
+(every method, config key, signal, icon name and troubleshooting entry).
 
 ### Library
 
@@ -550,6 +553,22 @@ end)
 | `Tab:AddESPPreview(config?)` | Live ESP preview card. |
 | `Tab:AddPlayerList(config?)` | Player roster card. |
 | `Section:AddToggle` `AddSlider` `AddDropdown` `AddButton` `AddTextBox` `AddKeybind` `AddColorPicker` `AddLabel` | Controls. |
+
+### Icons
+
+Icons are **drawn**, not typed: Roblox's fonts have no coverage for the usual
+symbols (`⌕ ✕ ▾ ✓ ◉`), which render as empty boxes. Pass a name, and the library
+draws it.
+
+| Member | Description |
+| --- | --- |
+| `CherryUI.Icons.new(kind, parent, size, color)` | Draw an icon (`"target"`, `"close"`, `"check"`, `"chevron"`, `"eye"`, `"layers"`, `"players"`, `"settings"`, `"search"`, `"refresh"`, `"copy"`, `"diamond"`, `"info"`, `"warning"`, `"success"`, `"error"`, `"cursor"`). |
+| `Icons.setColor(icon, color)` / `setTransparency(icon, alpha)` / `setSize(icon, size, info?)` | Restyle a drawn icon. |
+| `Icons.bindTheme(icon, CherryUI, token)` | Keep it in sync with the palette. |
+| `Icons.resolve(name)` | Map a glyph / friendly name to a kind (`nil` = render as text). |
+
+Tab icons and notification icons take the same names: `window:AddTab("Combat", "target")`,
+`CherryUI:Notify({ Icon = "success" })`.
 
 ### Component
 
