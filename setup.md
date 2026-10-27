@@ -173,20 +173,22 @@ toggled with **RightShift**.
 
 ### Cursor
 
-Loading Cherry UI replaces Roblox's pointer with a code-drawn cherry as soon as
-the library is required (or pasted). It needs no uploaded image, recolors with
-the theme and is hidden automatically under shift-lock / first person.
+Cherry UI keeps Roblox's own pointer (a drawn arrow is always heavier and
+blurrier than the client's, and hiding the system cursor risks leaving you with
+none) and paints a small themed cherry badge that trails the pointer. It needs
+no uploaded image, recolors with the theme, never covers the hotspot, and hides
+itself automatically under shift-lock / first person.
 
 ```lua
 CherryUI:SetCursorMode("always")   -- default: cherry everywhere outside shift-lock
 CherryUI:SetCursorMode("menu")     -- only while a window is open
-CherryUI:SetCursorMode("off")      -- restore the Roblox cursor
+CherryUI:SetCursorMode("off")      -- no badge at all
 CherryUI:GetCursorMode()           -- "always" | "menu" | "off"
 ```
 
 The mode can also be set per window:
-`CherryUI:CreateWindow({ Cursor = "menu" })`. Roblox's own cursor is restored on
-`CherryUI:Destroy()`.
+`CherryUI:CreateWindow({ Cursor = "menu" })`. Roblox's cursor is never touched,
+so nothing can leave you without a pointer.
 
 ### Resizing
 
@@ -479,8 +481,8 @@ reappear by accident.
 | Menu does not toggle with RightShift | The toggle key is handled before `gameProcessed` and is not blocked by focused text boxes, so the usual cause is Studio's **Run** (F8) mode or a server `Script` — use **Play** (F5), a LocalScript, or an executor. Also rebuild a stale `dist/CherryUI.lua` (`python3 tools/bundle.py`). Rebind with `CherryUI:SetToggleKey`, or toggle in code with `CherryUI:ToggleUI()`. |
 | Keybind shows "None" | Bindings accept `Enum.KeyCode` and the three mouse buttons; other input types are ignored. |
 | UI is too large / small | Resize the window from the bottom-right grip, or change `Size` in `CreateWindow`. The whole window also scales with viewport size. |
-| No cherry cursor | The library builds the ScreenGui when it runs on the client. Require it from a LocalScript (or paste the bundle); in Studio edit mode nothing is created. Check `CherryUI:GetCursorMode()` is not `"off"`. |
-| Roblox cursor vanished after stopping the script | A hard script stop skips `CherryUI:Destroy()`. Call `CherryUI:ResetCursor()` (or `SetCursorMode("off")`) before stopping, or reset `UserInputService.MouseIconEnabled = true` in the command bar. |
+| No cherry badge | The library builds the ScreenGui when it runs on the client. Require it from a LocalScript (or paste the bundle); in Studio edit mode nothing is created. Check `CherryUI:GetCursorMode()` is not `"off"`, and that the mouse is not locked (shift-lock / first person). |
+| Roblox cursor vanished | Cherry UI never disables the system cursor, so another script set `UserInputService.MouseIconEnabled = false`. Set it back to `true` in the command bar. |
 | Cursor sits under the topbar | Use the default `IgnoreGuiInset = false` ScreenGui; the cursor subtracts the `CoreUISafeInsets` itself. |
 | Dropdown appears behind the window | Popups need `CherryUI.Overlay`; do not reparent or destroy the library's `ScreenGui`. |
 | Theme switch leaves some elements unchanged | Custom instances must be registered with `CherryUI:Styled` or `BindGradient`. |

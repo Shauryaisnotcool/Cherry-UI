@@ -39,8 +39,8 @@ The library also adapts to the executor environment automatically:
 - GUI parent: uses `gethui()` when the executor exposes it (draws above the
   game's own UI), falls back to `PlayerGui`, with `pcall` guards so a hostile
   `gethui` cannot break loading.
-- Cherry cursor: **on by default** — the Roblox pointer is replaced the moment
-  the chunk runs (see §1.5).
+- Cherry cursor: **on by default** — a cherry badge trails the (untouched)
+  Roblox pointer as soon as the chunk runs (see §1.5).
 - Config storage: file mode uses `writefile`/`readfile`, clipboard uses
   `setclipboard` — each one degrades gracefully when missing (§1.6).
 

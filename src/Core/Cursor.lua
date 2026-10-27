@@ -1,27 +1,24 @@
 --[[
 	Core/Cursor.lua
-	The Cherry pointer: a stroke-drawn arrow with a cherry badge.
+	The Cherry cursor: Roblox's own arrow, plus a cherry that trails it.
 
-	Roblox cannot set an operating-system cursor from a LocalScript and there is
-	no way to ship an uploaded image with a library, so the supported route is to
-	hide the default pointer (`UserInputService.MouseIconEnabled = false`) and
-	draw our own. Everything here is GuiObjects, so it needs no asset id, recolors
-	with the active theme, and stays crisp at any resolution.
+	Earlier versions hid the system pointer and drew a replacement arrow from
+	GuiObjects. That is the wrong trade: a drawn arrow is always heavier and
+	blurrier than the client's own cursor, its hotspot math is approximate, and
+	if anything goes wrong the user is left with no pointer at all.
 
-	The arrow tip sits exactly at the frame's origin, which makes the hotspot
-	(0, 0): the pointer lands where the user is actually aiming.
+	So this keeps the native cursor untouched and draws the branding as a small
+	badge that follows the pointer with a little lag. The result reads as a
+	deliberate accent instead of a worse arrow, never blocks a click (the badge
+	sits below-right of the hotspot and is not `Active`), and cannot leave the
+	client without a cursor.
 
 	Modes (see `CherryUI:SetCursorMode`):
-	  * "always" - replaces the Roblox pointer as soon as the library loads (default)
+	  * "always" - the badge is always there (default)
 	  * "menu"   - only while a Cherry UI window is open
-	  * "off"    - never; the Roblox cursor is left alone
+	  * "off"    - nothing but the Roblox cursor
 
-	The cursor also survives mouse-lock changes: `Refresh` re-runs whenever
-	MouseBehavior flips, so unlocking the mouse brings the pointer back without
-	waiting for the menu to be opened or closed.
-
-	Cost: one RenderStepped connection that exists only while the cursor is
-	actually visible.
+	Cost: one RenderStepped connection, alive only while the badge is visible.
 ]]
 
 local GuiService = game:GetService("GuiService")
@@ -29,22 +26,24 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Create = require(script.Parent.Parent.Utils.Create)
-local Icons = require(script.Parent.Parent.Utils.Icons)
 local Tween = require(script.Parent.Parent.Utils.Tween)
 
 local Cursor = {}
 Cursor.__index = Cursor
 
-local FRAME = 32
-local ARROW = 24
--- Design-grid point the arrow tip lives at inside Core/Icons' "cursor" kind.
-local ARROW_TIP = Vector2.new(4.5, 1.5)
+local BADGE = 20
+-- Where the badge sits relative to the pointer hotspot: clear of the arrow
+-- itself, so the two never overlap.
+local OFFSET = Vector2.new(9, 11)
+-- Follow speed (per second). High enough to feel attached, low enough to trail.
+local FOLLOW = 16
+-- A jump this large is a teleport/respawn, not movement: snap instead of glide.
+local SNAP_DISTANCE = 220
 
 local MODES = { menu = true, always = true, off = true }
 local LEAF_DARK = Color3.fromHex("22C55E")
 local LEAF_LIGHT = Color3.fromHex("A7F3D0")
 local STEM_COLOR = Color3.fromHex("4ADE80")
-local BACKING = Color3.fromHex("0B0B0D")
 
 local function topbarInset()
 	local ok, inset = pcall(function()
@@ -66,54 +65,35 @@ function Cursor.new(library)
 	self.Visible = false
 	self.Destroyed = false
 	self.Inset = topbarInset()
-	self._ownsMouseIcon = false
+	self._position = nil
 	self._connection = nil
 	self._behaviorConnection = nil
+	self._inputConnection = nil
 
 	self.Frame = Create.new("Frame", {
 		Name = "CherryCursor",
 		AnchorPoint = Vector2.new(0, 0),
-		Size = UDim2.fromOffset(FRAME, FRAME),
+		Size = UDim2.fromOffset(BADGE, BADGE),
 		BackgroundTransparency = 1,
+		Active = false,
 		Visible = false,
 		ZIndex = 5000,
 		Parent = library.ScreenGui,
 	})
 
-	-- Soft shadow so the pointer reads on light and dark backgrounds alike.
-	local shadow = Create.new("Frame", {
-		Name = "Shadow",
-		Position = UDim2.fromOffset(3, 4),
-		Size = UDim2.fromOffset(22, 21),
-		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.6,
+	self.Scale = Create.new("UIScale", { Scale = 1, Parent = self.Frame })
+
+	-- Soft accent halo so the badge reads on light and dark backgrounds alike.
+	local glow = Create.new("Frame", {
+		Name = "Glow",
+		Position = UDim2.fromScale(-0.2, -0.2),
+		Size = UDim2.fromScale(1.4, 1.4),
+		BackgroundTransparency = 0.9,
 		ZIndex = 1,
 		Parent = self.Frame,
 	})
-	Create.corner(shadow, UDim.new(1, 0))
-
-	-- The arrow: a translucent dark copy sits behind the white one so the
-	-- outline stays readable over dark panels without a second asset.
-	local scale = ARROW / Icons.Grid
-	local tipOffset = UDim2.fromOffset(-ARROW_TIP.X * scale, -ARROW_TIP.Y * scale)
-
-	local backing = Icons.new("cursor", self.Frame, ARROW + 3, BACKING, 2)
-	backing.Position = tipOffset
-	Icons.setTransparency(backing, 0.45)
-
-	local arrow = Icons.new("cursor", self.Frame, ARROW, Color3.fromHex("FFFFFF"), 3)
-	arrow.Position = tipOffset
-
-	-- Cherry badge tucked under the arrow head, so the pointer is unmistakably
-	-- Cherry UI while still reading as an arrow.
-	local badge = Create.new("Frame", {
-		Name = "Badge",
-		Position = UDim2.fromOffset(13, 15),
-		Size = UDim2.fromOffset(18, 17),
-		BackgroundTransparency = 1,
-		ZIndex = 4,
-		Parent = self.Frame,
-	})
+	Create.corner(glow, UDim.new(1, 0))
+	library:Styled(glow, "Primary", "BackgroundColor3")
 
 	local function cherry(position, size, zIndex)
 		local berry = Create.new("Frame", {
@@ -121,7 +101,7 @@ function Cursor.new(library)
 			Position = position,
 			Size = UDim2.fromOffset(size, size),
 			ZIndex = zIndex,
-			Parent = badge,
+			Parent = self.Frame,
 		})
 		Create.corner(berry, UDim.new(1, 0))
 		library.ThemeManager:BindGradient(
@@ -129,15 +109,15 @@ function Cursor.new(library)
 			{ "Accent", "Primary" }
 		)
 
-		-- A thin light stroke keeps the silhouette readable over the dark panel.
-		library:Styled(Create.stroke(berry, Color3.new(1, 1, 1), 1, 0.55), "Text", "Color")
+		-- A thin light stroke keeps the silhouette readable over dark panels.
+		library:Styled(Create.stroke(berry, Color3.new(1, 1, 1), 1, 0.5), "Text", "Color")
 
 		local shine = Create.new("Frame", {
 			Name = "Shine",
 			Position = UDim2.fromScale(0.2, 0.16),
 			Size = UDim2.fromScale(0.32, 0.26),
 			BackgroundColor3 = Color3.new(1, 1, 1),
-			BackgroundTransparency = 0.45,
+			BackgroundTransparency = 0.4,
 			Rotation = -20,
 			ZIndex = zIndex + 1,
 			Parent = berry,
@@ -147,14 +127,15 @@ function Cursor.new(library)
 		return berry
 	end
 
+	-- Stem + leaf first, so the berries overlap them.
 	local stem = Create.new("Frame", {
 		Name = "Stem",
 		Position = UDim2.fromOffset(9, 1),
 		Size = UDim2.new(0, 1.6, 0, 6),
 		BackgroundColor3 = STEM_COLOR,
-		Rotation = 28,
-		ZIndex = 4,
-		Parent = badge,
+		Rotation = 26,
+		ZIndex = 2,
+		Parent = self.Frame,
 	})
 	Create.corner(stem, UDim.new(0.5, 0))
 
@@ -162,10 +143,10 @@ function Cursor.new(library)
 		Name = "Leaf",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromOffset(12, 3),
-		Size = UDim2.fromOffset(8, 4.5),
-		Rotation = -24,
-		ZIndex = 4,
-		Parent = badge,
+		Size = UDim2.fromOffset(9, 5),
+		Rotation = -26,
+		ZIndex = 2,
+		Parent = self.Frame,
 	})
 	Create.corner(leaf, UDim.new(1, 0))
 	Create.new("UIGradient", {
@@ -174,13 +155,25 @@ function Cursor.new(library)
 		Parent = leaf,
 	})
 
-	cherry(UDim2.fromOffset(2, 7), 11, 5)
-	cherry(UDim2.fromOffset(11, 10), 9, 6)
+	cherry(UDim2.fromOffset(2, 8), 12, 3)
+	cherry(UDim2.fromOffset(11, 11), 10, 4)
 
-	-- Shift-lock / first person hides the pointer; leaving it must restore it
-	-- even when no window was opened in between.
+	-- Shift-lock / first person hides the pointer; leaving it must restore the
+	-- badge even when no window was opened in between.
 	self._behaviorConnection = UserInputService:GetPropertyChangedSignal("MouseBehavior"):Connect(function()
 		self:Refresh()
+	end)
+
+	-- Click feedback: the badge dips when the user presses either mouse button.
+	self._inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed or self.Destroyed or not self.Visible then
+			return
+		end
+
+		local kind = input.UserInputType
+		if kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.MouseButton2 then
+			self:_pop()
+		end
 	end)
 
 	self:Refresh()
@@ -188,7 +181,17 @@ function Cursor.new(library)
 	return self
 end
 
--- GUI-space mouse position (the ScreenGui ignores the topbar inset).
+-- A quick dip-and-settle, driven by the window's own tween presets.
+function Cursor:_pop()
+	if not self.Scale then
+		return
+	end
+
+	self.Scale.Scale = 0.78
+	Tween.play(self.Scale, { Scale = 1 }, Tween.Info.Spring)
+end
+
+-- GUI-space pointer position (the ScreenGui ignores the topbar inset).
 function Cursor:_mousePosition()
 	local location = UserInputService:GetMouseLocation()
 	return Vector2.new(location.X, location.Y - self.Inset)
@@ -211,9 +214,23 @@ function Cursor:_shouldShow()
 	return window ~= nil and window.Visible == true and not window.Destroyed
 end
 
--- The arrow tip is the frame origin, so no hotspot offset is needed.
-function Cursor:_follow()
-	local position = self:_mousePosition()
+function Cursor:_follow(delta)
+	local target = self:_mousePosition() + OFFSET
+	local current = self._position
+
+	if not current then
+		self._position = target
+	else
+		local gap = target - current
+
+		if gap.Magnitude > SNAP_DISTANCE then
+			self._position = target
+		else
+			self._position = current + gap * math.min(1, FOLLOW * (delta or 1 / 60))
+		end
+	end
+
+	local position = self._position
 	self.Frame.Position = UDim2.fromOffset(position.X, position.Y)
 end
 
@@ -226,33 +243,21 @@ function Cursor:_setVisible(visible)
 	self.Frame.Visible = visible
 
 	if visible then
+		self._position = nil
 		self:_follow()
-		-- Hide the system pointer only after ours is on screen, so there is never
-		-- a frame with no cursor at all.
-		if UserInputService.MouseIconEnabled then
-			UserInputService.MouseIconEnabled = false
-			self._ownsMouseIcon = true
-		end
 
 		if not self._connection then
-			self._connection = RunService.RenderStepped:Connect(function()
+			self._connection = RunService.RenderStepped:Connect(function(delta)
 				if self:_shouldShow() then
-					self:_follow()
+					self:_follow(delta)
 				else
 					self:_setVisible(false)
 				end
 			end)
 		end
-	else
-		if self._connection then
-			self._connection:Disconnect()
-			self._connection = nil
-		end
-
-		if self._ownsMouseIcon then
-			UserInputService.MouseIconEnabled = true
-			self._ownsMouseIcon = false
-		end
+	elseif self._connection then
+		self._connection:Disconnect()
+		self._connection = nil
 	end
 end
 
@@ -291,6 +296,11 @@ function Cursor:Destroy()
 	if self._behaviorConnection then
 		self._behaviorConnection:Disconnect()
 		self._behaviorConnection = nil
+	end
+
+	if self._inputConnection then
+		self._inputConnection:Disconnect()
+		self._inputConnection = nil
 	end
 
 	if self.Frame then

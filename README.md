@@ -40,7 +40,7 @@ tight lid on instance churn and update frequency.
 - **Search** — filter every setting from the header search box.
 - **Dependency boxes** — hide controls behind a master toggle with
   `:AddDependency`.
-- **Cherry cursor** — the library swaps Roblox's pointer for a themed cherry
+- **Cherry cursor** — a themed cherry badge trails Roblox's own pointer (which stays sharp and untouched)
   drawn in code (`CherryUI:SetCursorMode("menu" | "always" | "off")`).
 - **Runs in executors** — [`dist/CherryUI.lua`](dist/CherryUI.lua) is a
   single-file bundle for Lua executors and `loadstring`, built by

@@ -1,6 +1,6 @@
 # Cherry UI — Function Reference
 
-Complete API for **Cherry UI v1.0.0**. Every function, config key and signal the library exposes, with runnable snippets.
+Complete API for **Cherry UI v1.1.0**. Every function, config key and signal the library exposes, with runnable snippets.
 
 > Looking for install steps instead? See [setup.md](setup.md) for Roblox Studio, [EXECUTORS.md](EXECUTORS.md) for `loadstring`/executor use, and [README.md](README.md) for the overview.
 
@@ -55,6 +55,7 @@ local CherryUI = getgenv().CherryUI     -- set by dist/CherryUI.lua
 | `GetPrimaryWindow` | `() -> Window?` | |
 | `Notify` | `(config) -> { Id, Dismiss() }` | See [Notifications](#9-notifications). |
 | `ToggleUI` | `()` | Toggle the primary window. Call this from your own keybind if you need one. |
+| `ShowNotice` | `(config)` | Show a notice card in the primary window (see [Window notices](#window-notices)). |
 | `SetToggleKey` | `(key: EnumItem)` | Accepts a `KeyCode` or a `UserInputType` (e.g. `Enum.UserInputType.MouseButton2`). |
 | `ToggleKey` | `EnumItem` | Default `Enum.KeyCode.RightShift`. |
 | `OnToggleKeyChanged` | `(callback) -> Connection` | Fires with the new key. |
@@ -94,7 +95,7 @@ CherryUI:SetCursorMode("menu")
 ```lua
 local window = CherryUI:CreateWindow({
 	Title      = "Cherry",
-	Subtitle   = "FPS Suite · v1.0.0",
+	Subtitle   = "FPS Suite · v1.1.0",
 	Size       = UDim2.fromOffset(640, 460),   -- or Width / Height numbers
 	Width      = 640,
 	Height     = 460,
@@ -110,14 +111,39 @@ local window = CherryUI:CreateWindow({
 | Method | Signature | Notes |
 | --- | --- | --- |
 | `AddTab` | `(name, icon?, builder?) -> Tab` | `icon` accepts a friendly name (`"target"`, `"layers"`, `"players"`, `"settings"`) or any glyph/emoji. `builder` is called **once**, the first time the tab is opened (lazy loading). `window:AddTab("Combat", function(tab) end)` also works. |
+| `CreateTab` | `(name, icon?, builder?) -> Tab` | Alias for `AddTab`. |
 | `SelectTab` | `(tab, instant?)` | |
 | `Open` / `Close` | `(animate?)` | `false` skips the fade. |
 | `Toggle` | `()` | |
 | `Filter` | `(query: string)` | Powers the search box; call it yourself to drive filtering programmatically. |
 | `RegisterSearchEntry` / `UnregisterSearchEntry` | `(component)` | Controls call these automatically. |
+| `ShowNotice` | `(config) -> { Dismiss() }` | In-window banner: `Title`, `Content`, `Type` (`info`/`success`/`warning`/`error`), `Icon`, `Duration`. |
+| `ClearNotice` | `()` | Dismiss the current notice. |
 | `Destroy` | `()` | |
 
+**Version check:** `print(CherryUI.Version)` — `1.1.0` is the release with drawn icons, the trailing cherry badge and in-window notices. An older number means a stale `dist/CherryUI.lua`.
+
 **Properties:** `Title`, `Subtitle`, `Width`, `Height`, `MinWidth`, `MinHeight`, `Resizable`, `Visible`, `Tabs`, `ActiveTab`, `Root`, `Frame`, `Content`, `SearchBox`, `Destroyed`.
+
+### Window notices
+
+Anything the console would swallow — a tab builder that threw, a window with no
+tabs — is reported **inside the window**:
+
+```lua
+window:ShowNotice({
+	Type = "error",              -- info | success | warning | error
+	Title = "Tab failed to build",
+	Content = "Dropdown: ...",   -- wrapped, multi-line OK
+	Icon = "warning",            -- optional drawn icon name
+	Duration = 8,                -- seconds; omit to keep it on screen
+}):Dismiss()
+```
+
+A window that still has no tabs 1.5 s after it is created shows exactly that,
+with the snippet needed to add one. `CherryUI:ShowNotice(config)` targets the
+primary window. Only one notice is visible at a time; calling `AddTab`
+successfully clears it.
 
 **Interaction:** drag the header bar; resize with the bottom-right grip, the right edge or the bottom edge (all three), or double-click-free. Windows are clamped into the viewport and scale down automatically on small screens (`UIScale` + `CoreUISafeInsets`).
 
@@ -474,16 +500,16 @@ Other members: `Register(component)`, `Unregister(component)`, `MarkDirty()`, `S
 
 ## 12. Cherry cursor
 
-The cherry pointer replaces the Roblox cursor the moment the library loads (`"always"` is the default) and needs **no uploaded asset** — it is drawn from `GuiObjects`, so it recolors with the theme and stays sharp at any resolution. It is an arrow (hotspot at the arrow tip) with a cherry badge tucked under the head.
+Cherry UI **keeps Roblox's own pointer**. A drawn replacement arrow is always heavier than the client's cursor, its hotspot math is approximate, and hiding the system cursor risks leaving you with none — so instead a small themed **cherry badge** trails the pointer from its lower-right (with a slight lag, and a dip on click). It needs no uploaded asset, recolors with the theme, and never sits on the hotspot or blocks a click.
 
 ```lua
 CherryUI:SetCursorMode("always")   -- default
 CherryUI:SetCursorMode("menu")     -- only while a window is open
-CherryUI:SetCursorMode("off")      -- leave Roblox's cursor alone
+CherryUI:SetCursorMode("off")      -- no badge at all
 print(CherryUI:GetCursorMode())
 ```
 
-It hides itself during mouse-lock / first person and returns on unlock. `CherryUI.Cursor` exposes `SetMode`, `GetMode`, `Refresh`, `Destroy`.
+The badge hides itself during mouse-lock / first person and returns on unlock. `CherryUI.Cursor` exposes `SetMode`, `GetMode`, `Refresh`, `Destroy`.
 
 ---
 
@@ -618,7 +644,7 @@ CherryUI:Notify({
 | RightShift does nothing | You are running in Studio's **Run** (F8) mode or from a `Script` on the server — Cherry UI is client-only. Use **Play** (F5), a LocalScript in `StarterPlayerScripts`, or an executor. `CherryUI:ToggleUI()` also works from your own keybind. |
 | Nothing renders at all | The module builds its `ScreenGui` on the client. Check the output for the `[CherryUI]` warning explaining which case you hit. |
 | Icons show as empty squares | That only happens with the old glyph icons. Rebuild the bundle (`python3 tools/bundle.py`) so `dist/CherryUI.lua` matches `src/`. |
-| The cursor looks like two cursors | Another script also owns the pointer, or you hid it manually. `CherryUI:ResetCursor()` puts Roblox's back; `SetCursorMode("menu")` avoids conflicts. |
+| The cursor is an arrow plus a cherry | That is by design: the native pointer is untouched and the cherry is a badge beside it. `CherryUI:SetCursorMode("off")` removes the badge. |
 | A control never appears | It has a dependency box that is not satisfied. `control:SetVisible(true)` overrides it, `control:UpdateVisibility()` re-evaluates. |
 | Config does not persist | `"memory"` is the default. Use `Config:SetMode("file", { Path = … })` (executor) or `"datastore"`/`"custom"`. |
 | Tabs are slow to open | They are lazily built on first open by design. Move heavy work out of the tab builder if you see a hitch. |

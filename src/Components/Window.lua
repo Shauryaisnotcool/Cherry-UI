@@ -92,6 +92,36 @@ function Window.new(library, config)
 		end
 	end)
 
+	--[[
+		An empty window is undiagnosable from the outside, so after a moment of
+		grace it explains itself: this is what happens when the calling script hit
+		an error before its first AddTab (or is running a stale bundle).
+	]]
+	task.delay(1.5, function()
+		if self.Destroyed or #self.Tabs > 0 then
+			return
+		end
+
+		warn(string.format(
+			"[CherryUI] Window '%s' has no tabs yet. Add one with window:AddTab(name, icon, builder).",
+			self.Title
+		))
+
+		self:ShowNotice({
+			Type = "info",
+			Icon = "layers",
+			Title = "This window has no tabs yet",
+			Content = table.concat({
+				"If your script already calls AddTab, it hit an error before reaching it —",
+				"check the Output/console for the first message. Otherwise:",
+				'',
+				'window:AddTab("Combat", "target", function(tab)',
+				'\ttab:AddSection("Aimbot"):AddToggle({ Name = "Enable Aimbot" })',
+				'end)',
+			}, "\n"),
+		})
+	end)
+
 	library.Windows[self] = true
 
 	if config.StartOpen ~= false then
@@ -443,6 +473,23 @@ function Window:_build()
 	})
 	library:Styled(self.NoResults, "SubText", "TextColor3")
 
+	--[[
+		Notice banner: an in-window card for things the console would hide.
+		An empty menu is the most confusing state a library can put a script
+author in, so "no tabs yet" and failed tab builders are reported here.
+	]]
+	self.NoticeHolder = Create.new("Frame", {
+		Name = "Notice",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 14),
+		Size = UDim2.new(1, -32, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		Visible = false,
+		ZIndex = 40,
+		Parent = self.Content,
+	})
+
 	-- Resize affordances: a corner grip (22x22 hit area) plus thin right/bottom
 	-- edges, so the window can be grabbed from any of the three expected spots.
 	self.ResizeGrip = Create.textButton({
@@ -720,6 +767,168 @@ function Window:_onInputEnded(input)
 	end
 end
 
+--------------------------------------------------------------------------
+-- Notices
+--------------------------------------------------------------------------
+
+local NOTICE_STYLE = {
+	info = { Token = "Primary", Kind = "info" },
+	success = { Token = "Success", Kind = "success" },
+	warning = { Token = "Warning", Kind = "warning" },
+	error = { Token = "Danger", Kind = "error" },
+}
+
+--[[
+	Shows a card across the top of the content area. The console is easy to miss
+	(and invisible in a screenshot), so warnings that matter — a tab that failed
+	to build, a window with no tabs — are reported in the interface itself.
+
+		window:ShowNotice({
+			Type = "error",        -- info | success | warning | error
+			Title = "Tab failed to build",
+			Content = "...",
+			Duration = 8,          -- seconds; omit to keep it on screen
+		})
+
+	Returns a handle with `:Dismiss()`. Only one notice shows at a time.
+]]
+function Window:ShowNotice(config)
+	config = config or {}
+
+	if self.Destroyed or not self.NoticeHolder then
+		return nil
+	end
+
+	local library = self.Library
+	local style = NOTICE_STYLE[config.Type or "info"] or NOTICE_STYLE.info
+	local token = style.Token
+	local accent = library.Palette[token] or library.Palette.Primary
+
+	self:ClearNotice()
+
+	local card = Create.new("Frame", {
+		Name = "NoticeCard",
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 0.05,
+		ZIndex = 41,
+		Parent = self.NoticeHolder,
+	})
+	library:Styled(card, "Surface", "BackgroundColor3")
+	Create.corner(card, 10)
+	library:Styled(Create.stroke(card, accent, 1, 0.45), token, "Color")
+	Create.padding(card, 12, 34, 12, 12)
+
+	local accentBar = Create.new("Frame", {
+		Name = "Accent",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 6, 0, 8),
+		Size = UDim2.fromOffset(3, 16),
+		ZIndex = 42,
+		Parent = card,
+	})
+	Create.corner(accentBar, 2)
+	library:Styled(accentBar, token, "BackgroundColor3")
+
+	local icon = Icons.new(Icons.resolve(config.Icon) or style.Kind, card, 16, accent, 42)
+	icon.Position = UDim2.fromOffset(2, 0)
+
+	local title = Create.label({
+		Name = "Title",
+		Text = tostring(config.Title or "Notice"),
+		Font = Enum.Font.GothamBold,
+		TextSize = 13,
+		Position = UDim2.fromOffset(24, 0),
+		Size = UDim2.new(1, -24, 0, 17),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		ZIndex = 42,
+		Parent = card,
+	})
+	library:Styled(title, "Text", "TextColor3")
+
+	local content = Create.label({
+		Name = "Content",
+		Text = tostring(config.Content or ""),
+		TextSize = 11,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Position = UDim2.fromOffset(24, 18),
+		Size = UDim2.new(1, -24, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		ZIndex = 42,
+		Parent = card,
+	})
+	library:Styled(content, "SubText", "TextColor3")
+
+	local close = Create.textButton({
+		Name = "Dismiss",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -4, 0, 0),
+		Size = UDim2.fromOffset(18, 18),
+		Text = "",
+		ZIndex = 42,
+		Parent = card,
+	})
+	Create.corner(close, 9)
+
+	local closeIcon = Icons.new("close", close, 10, library.Palette.SubText, 43)
+	closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	closeIcon.Position = UDim2.fromScale(0.5, 0.5)
+
+	local notice
+	notice = {
+		Frame = card,
+		Dismiss = function()
+			if self._notice == notice then
+				self:ClearNotice()
+			end
+		end,
+	}
+
+	self._notice = notice
+	self.NoticeHolder.Visible = true
+
+	self:_track(close.Activated:Connect(function()
+		notice.Dismiss()
+	end))
+
+	-- Slide + fade in, so it never just pops into an empty panel.
+	card.Position = UDim2.fromOffset(0, -8)
+	Fade.play(card, 1, 0, 0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+	Tween.play(card, { Position = UDim2.fromOffset(0, 0) }, Tween.Info.Smooth)
+
+	local duration = tonumber(config.Duration)
+	if duration and duration > 0 then
+		task.delay(duration, function()
+			notice.Dismiss()
+		end)
+	end
+
+	return notice
+end
+
+function Window:ClearNotice()
+	local notice = self._notice
+	if not notice then
+		return
+	end
+
+	self._notice = nil
+
+	if self.NoticeHolder and not self.NoticeHolder.Destroyed then
+		self.NoticeHolder.Visible = false
+	end
+
+	if notice.Frame then
+		notice.Frame:Destroy()
+	end
+end
+
+--[[
+	Adds a tab. Failures are reported in the window instead of silently
+	leaving a blank menu (and instead of taking the caller's script down):
+	`AddTab` returns nil and the reason appears in a notice card.
+]]
 function Window:AddTab(name, icon, builder)
 	if self.Destroyed then
 		return nil
@@ -730,6 +939,26 @@ function Window:AddTab(name, icon, builder)
 		builder = icon
 		icon = nil
 	end
+
+	local ok, tab = pcall(self._createTab, self, name, icon, builder)
+
+	if not ok then
+		warn("[CherryUI] Could not create tab '" .. tostring(name) .. "': " .. tostring(tab))
+		self:ShowNotice({
+			Type = "error",
+			Title = 'Could not create tab "' .. tostring(name) .. '"',
+			Content = tostring(tab),
+		})
+		return nil
+	end
+
+	-- The first tab clears the "no tabs yet" hint.
+	self:ClearNotice()
+	return tab
+end
+
+function Window:_createTab(name, icon, builder)
+	-- (`Window:CreateTab` is an alias for this, provided at the end of the file.)
 
 	local tab = Tab.new(self.Library, self, {
 		Name = name,
@@ -1173,5 +1402,12 @@ function Window:Destroy()
 
 	self.Root:Destroy()
 end
+
+--[[
+	Naming alias: plenty of UI libraries call this `CreateTab`, and a missing
+	method means the caller's whole script dies on the next line — leaving an
+	empty window with no explanation. Both spellings do the same thing.
+]]
+Window.CreateTab = Window.AddTab
 
 return Window

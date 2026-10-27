@@ -108,6 +108,16 @@ function Tab:EnsureBuilt()
 		local ok, err = pcall(self.Builder, self)
 		if not ok then
 			warn("[CherryUI] Tab '" .. tostring(self.Name) .. "' builder failed: " .. tostring(err))
+
+			-- Show it in the window as well: a half-built tab with no explanation
+			-- is the hardest thing in this library to debug from the outside.
+			if self.Window and not self.Window.Destroyed then
+				self.Window:ShowNotice({
+					Type = "error",
+					Title = 'Tab "' .. tostring(self.Name) .. '" failed to build',
+					Content = tostring(err),
+				})
+			end
 		end
 	end
 

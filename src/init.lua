@@ -49,7 +49,9 @@ Library.__index = Library
 function Library.new()
 	local self = setmetatable({}, Library)
 
-	self.Version = "1.0.0"
+	-- Bumped so a stale bundle is obvious: `print(CherryUI.Version)` should match
+	-- the release you loaded.
+	self.Version = "1.1.0"
 
 	--[[
 		Exposed so scripts built on Cherry UI can reuse the same motion, pooling
@@ -258,6 +260,19 @@ function Library:CreateWindow(config)
 		self:SetToggleKey(config.ToggleKey)
 	end
 
+	--[[
+		Two live windows stack, and the newer one (usually the accidental one)
+		sits on top — which looks exactly like "the menu is empty". Say so instead
+		of letting the first window hide behind it.
+	]]
+	local existing = self.PrimaryWindow
+	if existing and not existing.Destroyed then
+		warn(string.format(
+			"[CherryUI] A second window was created while '%s' is still open. Reuse that one, or call window:Destroy() first.",
+			existing.Title
+		))
+	end
+
 	self:_ensureScreen()
 	if not self.ScreenGui then
 		return nil
@@ -287,6 +302,18 @@ end
 
 function Library:GetPrimaryWindow()
 	return self.PrimaryWindow
+end
+
+-- Shows a notice card in the primary window (handy for reporting an error to a
+-- user who never sees the console). See `Window:ShowNotice`.
+function Library:ShowNotice(config)
+	local window = self.PrimaryWindow
+
+	if not window or window.Destroyed then
+		return nil
+	end
+
+	return window:ShowNotice(config)
 end
 
 function Library:Notify(config)
