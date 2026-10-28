@@ -1208,7 +1208,7 @@ function Window:Filter(query)
 end
 
 function Window:Open(animate)
-	if self.Destroyed or self.Visible then
+	if self.Destroyed or self:IsOpen() then
 		return
 	end
 
@@ -1234,6 +1234,24 @@ function Window:Open(animate)
 	self._animScale = 0.96
 	self:_applyScale()
 
+	--[[
+		Self-heal: once the window is fully in, any text or panel still sitting
+		at full transparency was left there by an interrupted animation (an
+		interrupted fade, an executor reload, a script that hid it by hand).
+		Restoring it here means an intermittent rendering bug can never make the
+		menu permanently unreadable.
+	]]
+	task.delay(0.34, function()
+		if self.Destroyed or not self.Visible or not self.Root.Visible then
+			return
+		end
+
+		local repaired = self.Library.Fade.reset(self.Root, true)
+		if repaired > 0 then
+			print(string.format("[CherryUI] Restored %d invisible propert%s.", repaired, repaired == 1 and "y" or "ies"))
+		end
+	end)
+
 	Tween.number(0.96, 1, 0.32, function(value)
 		if self.Destroyed or self._animToken ~= token then
 			return
@@ -1247,7 +1265,14 @@ function Window:Open(animate)
 end
 
 function Window:Close(animate)
-	if self.Destroyed or not self.Visible then
+	if self.Destroyed then
+		return
+	end
+
+	-- Not `not self.Visible`: a window whose fade was interrupted can report
+	-- itself closed while its root is still on screen, and then the keybind
+	-- would look dead. Closing always wins.
+	if not self.Visible and not self.Root.Visible then
 		return
 	end
 
@@ -1299,11 +1324,16 @@ function Window:Close(animate)
 end
 
 function Window:Toggle()
-	if self.Visible then
+	if self:IsOpen() then
 		self:Close()
 	else
 		self:Open()
 	end
+end
+
+-- True while the window is actually on screen (state and root agree).
+function Window:IsOpen()
+	return (self.Visible or false) and (self.Root.Visible or false)
 end
 
 function Window:_playLogoIntro()

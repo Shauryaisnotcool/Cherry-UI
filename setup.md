@@ -1,5 +1,9 @@
 # Cherry UI — Setup Guide
 
+> Looking for component-by-component code? **[guide.md](guide.md)** has a
+> copy-paste snippet for every control, tab, theme, icon and config backend.
+> This file is about getting the library into a game.
+
 This guide walks through installing Cherry UI, placing it correctly, and using
 the window, controls, themes, notifications, config saving, the ESP preview and
 the player list.

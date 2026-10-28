@@ -12,7 +12,7 @@
 <p align="center">
   <img alt="Roblox" src="https://img.shields.io/badge/Roblox-Luau-FF4D6D?style=flat-square" />
   <img alt="License" src="https://img.shields.io/badge/license-MIT-FF4D6D?style=flat-square" />
-  <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-FF4D6D?style=flat-square" />
+  <img alt="Version" src="https://img.shields.io/badge/version-1.2.0-FF4D6D?style=flat-square" />
 </p>
 
 ---
@@ -47,6 +47,9 @@ tight lid on instance churn and update frequency.
   `python3 tools/bundle.py`.
 - **FPS essentials** — keybinds, numeric text boxes, color pickers, sliders and
   dropdowns (single and multi select).
+- **Your icons, or ours** — drawn vector icons work everywhere with no uploads;
+  point any name at a Roblox asset id to use
+  [icons8](https://icons8.com) artwork instead (`CherryUI:SetIcons`).
 
 ## Screenshots
 
@@ -115,12 +118,19 @@ the open menu, and `"off"` restores Roblox's pointer.
 
 ## Documentation
 
-The full integration guide lives in **[setup.md](setup.md)**. It covers Rojo and
-manual installation, every component, themes, notifications, config backends,
-the ESP preview hook, player list actions and troubleshooting.
+Start with **[guide.md](guide.md)** — the cookbook: every component, one at a
+time, with copy-paste code (window, tabs, sections, toggles, buttons, sliders,
+dropdowns, text boxes, keybinds, color pickers, dependencies, search, ESP
+preview, player list, notifications, themes, config, icons).
 
-The complete function reference — every method, config key and icon name — is
-**[API.md](API.md)**.
+**[setup.md](setup.md)** is the installation guide: Rojo, manual model, release
+build, executors, and troubleshooting.
+
+**[API.md](API.md)** is the complete function reference — every method, config
+key and icon name.
+
+Using icons8 artwork instead of the drawn icons? See
+**[docs/icons8](docs/icons8/README.md)**.
 
 Working on Cherry UI itself? **[RESUME.md](RESUME.md)** covers the development
 loop: the Rojo plugin end to end, both project files, static checks that run

@@ -16,6 +16,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local Create = require(script.Utils.Create)
 local Signal = require(script.Utils.Signal)
@@ -43,6 +44,11 @@ local Themes = {
 local THEME_ORDER = { "Crimson", "Pink", "Purple", "Green", "Blue" }
 local DEFAULT_THEME = "Crimson"
 
+-- Priority 3000 sits above the 2000 a game's own BindAction uses by default, so
+-- the menu key wins the key even in a game that binds RightShift itself.
+local TOGGLE_ACTION = "CherryUIToggleUI"
+local TOGGLE_PRIORITY = 3000
+
 local Library = {}
 Library.__index = Library
 
@@ -51,7 +57,7 @@ function Library.new()
 
 	-- Bumped so a stale bundle is obvious: `print(CherryUI.Version)` should match
 	-- the release you loaded.
-	self.Version = "1.1.0"
+	self.Version = "1.2.0"
 
 	--[[
 		Exposed so scripts built on Cherry UI can reuse the same motion, pooling
@@ -124,7 +130,82 @@ end
 -- How long an unfinished keybind capture may block the menu toggle.
 local CAPTURE_TIMEOUT = 5
 
+-- Two toggle paths (ContextActionService + UserInputService) must never fire
+-- twice for one physical press, or the menu closes itself in the same frame.
+local DOUBLE_PRESS_WINDOW = 0.03
+local lastToggleAt = 0
+
+--[[
+	One physical key press reaches the library twice: once through
+	ContextActionService and once through UserInputService. When both see the
+	same `InputObject` the identity check is exact; some clients hand each path
+	its own object though, so a 30 ms window catches that duplicate. A person
+	cannot press twice inside 30 ms, so no deliberate double tap is lost.
+]]
+function Library:_togglePressed(input)
+	if input ~= nil and self._toggleInput == input then
+		return
+	end
+
+	local now = os.clock()
+	if now - lastToggleAt < DOUBLE_PRESS_WINDOW then
+		return
+	end
+
+	lastToggleAt = now
+	self._toggleInput = input
+	self:ToggleUI()
+end
+
+--[[
+	Binds the toggle key through ContextActionService as well as
+	UserInputService.
+
+	UserInputService alone is not enough: when a game binds the same key (or a
+	TextBox has focus) the press is either sunk before the library sees it or
+	arrives with `gameProcessed` set. ContextActionService is the request to be
+	told about the key *first*, at a priority above the usual 2000 a game's own
+	`BindAction` uses, so the menu key keeps working in busy games.
+]]
+function Library:_bindToggleAction()
+	if self._toggleAction then
+		ContextActionService:UnbindAction(self._toggleAction)
+		self._toggleAction = nil
+	end
+
+	local key = self.ToggleKey
+	if not key then
+		return
+	end
+
+	self._toggleAction = TOGGLE_ACTION
+
+	local ok = pcall(function()
+		ContextActionService:BindActionAtPriority(TOGGLE_ACTION, function(_, inputState, inputObject)
+			if inputState ~= Enum.UserInputState.Begin then
+				return Enum.ContextActionResult.Pass
+			end
+
+			-- A Keybind control is recording: the key belongs to it.
+			if self.Capturing and os.clock() - (self._captureStarted or 0) < CAPTURE_TIMEOUT then
+				return Enum.ContextActionResult.Pass
+			end
+
+			self:_togglePressed(inputObject)
+			return Enum.ContextActionResult.Sink
+		end, TOGGLE_PRIORITY, false, key)
+	end)
+
+	if not ok then
+		-- Some executors ship a stripped ContextActionService; the
+		-- UserInputService path below still works.
+		self._toggleAction = nil
+	end
+end
+
 function Library:_bindInput()
+	self:_bindToggleAction()
+
 	self._inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if self.Capturing then
 			-- Keybind capture owns the keyboard, but only for a moment: a capture
@@ -144,7 +225,7 @@ function Library:_bindInput()
 			short of an active keybind capture gets to block it.
 		]]
 		if Util.matchesInput(input, self.ToggleKey) then
-			self:ToggleUI()
+			self:_togglePressed(input)
 			return
 		end
 
@@ -353,12 +434,39 @@ function Library:SetTheme(name, animate)
 	return false
 end
 
+--[[
+	Replaces the built-in drawn icons with uploaded images, per kind:
+
+		CherryUI:SetIcons({
+			target = "rbxassetid://1234567890",
+			close  = "rbxassetid://1234567891",
+		})
+
+	Call it before creating windows (icons are built with the interface). Use
+	white PNGs so ImageColor3 can tint them to the active theme, and
+	`CherryUI.Icons.kinds()` for the list of overridable names.
+]]
+function Library:SetIcons(map)
+	if self.Destroyed then
+		return 0
+	end
+
+	local applied = Icons.setImages(map)
+
+	if applied > 0 then
+		self.Config:MarkDirty()
+	end
+
+	return applied
+end
+
 function Library:SetToggleKey(key)
 	if typeof(key) ~= "EnumItem" or self.ToggleKey == key then
 		return
 	end
 
 	self.ToggleKey = key
+	self:_bindToggleAction()
 	self.Config:MarkDirty()
 	self.ToggleKeyChanged:Fire(key)
 end
@@ -367,24 +475,103 @@ function Library:OnToggleKeyChanged(callback)
 	return self.ToggleKeyChanged:Connect(callback)
 end
 
-function Library:ToggleUI()
-	local window = self.PrimaryWindow
+--[[
+	Scans every window for elements that are stuck invisible and restores them.
 
-	-- Recover when the primary window was destroyed: toggle any live window so
-	-- the keybind keeps working instead of going quiet.
-	if not window or window.Destroyed then
-		window = nil
+	A fade that is interrupted half-way, an executor reloading the script, or a
+	script that hides a frame by hand and forgets to bring it back can all leave
+	text and panels at full transparency. `Diagnose` is the one-liner that puts
+them back, and it prints what it did:
+
+		print(CherryUI:Diagnose())
+]]
+function Library:Diagnose(repair)
+	local report = {
+		Windows = 0,
+		Repaired = 0,
+		Details = {},
+	}
+
+	for window in self.Windows do
+		if not window.Destroyed then
+			report.Windows += 1
+
+			local count, details = Fade.reset(window.Root)
+			report.Repaired += count
+
+			for index = 1, #details do
+				table.insert(report.Details, details[index])
+			end
+
+			-- Keep the window's own state honest about what is on screen.
+			if window.Visible and not window.Root.Visible then
+				window.Visible = false
+			end
+		end
+	end
+
+	if repair == false then
+		return report
+	end
+
+	if report.Repaired > 0 then
+		warn(
+			string.format(
+				"[CherryUI] Diagnose restored %d invisible propert%s across %d window(s).",
+				report.Repaired,
+				report.Repaired == 1 and "y" or "ies",
+				report.Windows
+			)
+		)
+	else
+		print(string.format("[CherryUI] Diagnose: %d window(s) checked, nothing stuck.", report.Windows))
+	end
+
+	return report
+end
+
+--[[
+	Shows or hides the interface. Every live window is treated together: if any
+	one of them is on screen the keybind hides them all, otherwise it shows the
+	primary window. That is what makes the key feel reliable in scripts that
+	create a second window by accident.
+]]
+function Library:ToggleUI()
+	if self.Destroyed then
+		return
+	end
+
+	local primary = self.PrimaryWindow
+	if not primary or primary.Destroyed then
+		primary = nil
 		for candidate in self.Windows do
 			if not candidate.Destroyed then
-				window = candidate
+				primary = candidate
 				self.PrimaryWindow = candidate
 				break
 			end
 		end
 	end
 
-	if window and not window.Destroyed then
-		window:Toggle()
+	local open = false
+	for candidate in self.Windows do
+		if not candidate.Destroyed and candidate:IsOpen() then
+			open = true
+			break
+		end
+	end
+
+	if open then
+		for candidate in self.Windows do
+			if not candidate.Destroyed then
+				candidate:Close()
+			end
+		end
+		return
+	end
+
+	if primary and not primary.Destroyed then
+		primary:Open()
 	end
 end
 
@@ -505,6 +692,13 @@ function Library:Destroy()
 	if self._inputConnection then
 		self._inputConnection:Disconnect()
 		self._inputConnection = nil
+	end
+
+	if self._toggleAction then
+		pcall(function()
+			ContextActionService:UnbindAction(self._toggleAction)
+		end)
+		self._toggleAction = nil
 	end
 
 	self.Scheduler:Destroy()

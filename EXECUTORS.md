@@ -8,7 +8,8 @@ Two topics, nothing else:
    resolves for everyone who copies it.
 
 For Studio/Rojo setup, the component API or themes, see
-[setup.md](setup.md) and [README.md](README.md) instead.
+[setup.md](setup.md), [guide.md](guide.md) (every component with copy-paste
+code) and [README.md](README.md) instead.
 
 ---
 
@@ -270,13 +271,13 @@ rojo build model.project.json -o build/CherryUI.rbxm   # Studio model asset
 python3 tools/bundle.py                                # refresh dist/CherryUI.lua
 
 git add src dist/CherryUI.lua
-git commit -m "Cherry UI v1.1.0"
-git tag -a v1.1.0 -m "Cherry UI v1.1.0"
-git push origin main v1.1.0
+git commit -m "Cherry UI v1.2.0"
+git tag -a v1.2.0 -m "Cherry UI v1.2.0"
+git push origin main v1.2.0
 
 # with gh:
-gh release create v1.1.0 build/CherryUI.rbxm dist/CherryUI.lua \
-  --title "Cherry UI v1.1.0" \
+gh release create v1.2.0 build/CherryUI.rbxm dist/CherryUI.lua \
+  --title "Cherry UI v1.2.0" \
   --notes "…what changed…"
 
 # without gh: Repo → Releases → Draft a new release → pick the tag
@@ -286,7 +287,7 @@ gh release create v1.1.0 build/CherryUI.rbxm dist/CherryUI.lua \
 Users then load a pinned version instead of `main`:
 
 ```lua
-local CherryUI = loadstring(game:HttpGet("https://github.com/YOUR_NAME/Cherry-UI/releases/download/v1.1.0/CherryUI.lua"))()
+local CherryUI = loadstring(game:HttpGet("https://github.com/YOUR_NAME/Cherry-UI/releases/download/v1.2.0/CherryUI.lua"))()
 ```
 
 ### 2.5 The everyday loop afterwards

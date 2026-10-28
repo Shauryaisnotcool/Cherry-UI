@@ -4,10 +4,9 @@
 
 	Why not text glyphs? Roblox's default fonts have no coverage for the
 	"dingbat" range (⌕ ✕ ▾ ✓ ◉ …), so those characters render as tofu boxes.
-	Uploaded images are not an option either: a drop-in library cannot ship
-	asset IDs. Every icon here is composed from a few rounded Frames instead,
-	which means it is font-independent, stays sharp at any size, recolors with
-	the theme, and animates (rotation, transparency) like any other instance.
+	Every built-in icon is composed from a few rounded Frames instead, which
+	means it is font-independent, stays sharp at any size, recolors with the
+	theme, and animates (rotation, transparency) like any other instance.
 
 	Icons are designed once on a 20x20 grid and scaled to the requested size, so
 	the same drawing drives a 12px dropdown check and the 24px cursor arrow.
@@ -15,6 +14,10 @@
 		Icons.new("target", parent, 16, palette.Primary)
 		Icons.setColor(icon, palette.SubText)
 		Icons.setTransparency(icon, 0.5)   -- used by tab dimming
+
+	Custom artwork is supported too: upload a white PNG (icons8, Figma,
+	anything), then override kinds by asset id with `Icons.setImages` /
+	`CherryUI:SetIcons` before creating windows. See guide.md.
 ]]
 
 local Create = require(script.Parent.Create)
@@ -24,6 +27,75 @@ local Icons = {}
 
 -- The design grid every builder draws on.
 Icons.Grid = 20
+
+--[[
+	Optional image overrides. Roblox can only draw an image that lives in its
+	own content system, so the workflow for a custom icon set (icons8 or your
+	own art) is: upload the PNG in Studio, then point the matching icon kind at
+	the new asset id *before* windows are created.
+
+		CherryUI:SetIcons({
+			target = "rbxassetid://1234567890",
+			close = "rbxassetid://1234567891",
+		})
+
+	Use white/transparent PNGs: `ImageColor3` tints each icon to the active
+	theme's colour, which only works on light artwork (a black glyph stays black).
+]]
+local Images = {}
+
+local function isAsset(text)
+	return type(text) == "string"
+		and (
+			string.find(text, "rbxassetid://", 1, true)
+			or string.find(text, "rbxasset://", 1, true)
+			or string.find(text, "rbxthumb://", 1, true)
+			or string.find(text, "http", 1, true)
+		)
+end
+
+Icons.isAsset = isAsset
+
+-- Registers one image override for an icon kind (or several, via `setImages`).
+function Icons.setImage(kind, asset)
+	if type(kind) ~= "string" then
+		return false
+	end
+
+	-- nil and "" both mean "use the drawn icon": an icon-pack template ships
+	-- with empty placeholders, and those must not warn.
+	if asset == nil or asset == "" then
+		Images[kind] = nil
+		return true
+	end
+
+	if not isAsset(asset) then
+		warn("[CherryUI] Icon image must be a Roblox asset (rbxassetid://…): " .. tostring(asset))
+		return false
+	end
+
+	Images[kind] = asset
+	return true
+end
+
+function Icons.setImages(map)
+	if type(map) ~= "table" then
+		return 0
+	end
+
+	local applied = 0
+	for kind, asset in map do
+		if Icons.setImage(kind, asset) then
+			applied += 1
+		end
+	end
+
+	return applied
+end
+
+function Icons.getImage(kind)
+	return Images[kind]
+end
 
 -- frame -> { Parts = { { Instance, Color, Transparency } }, Size = n } (weak keys)
 local Registry = setmetatable({}, { __mode = "k" })
@@ -374,6 +446,32 @@ function Icons.new(kind, parent, size, color, zIndex)
 		Parent = parent,
 	})
 
+	-- An uploaded image is used verbatim: either the kind itself is an asset id
+	-- (`Icons.new("rbxassetid://123", …)`) or the kind has an override.
+	local image = isAsset(kind) and kind or Images[kind]
+	if image then
+		local label = Create.new("ImageLabel", {
+			Name = "Glyph",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Image = image,
+			ImageColor3 = color,
+			ImageTransparency = 0,
+			ScaleType = Enum.ScaleType.Fit,
+			ZIndex = zIndex,
+			Parent = root,
+		})
+
+		Registry[root] = {
+			Parts = { { Instance = label, Color = "ImageColor3", Transparency = "ImageTransparency" } },
+			Image = label,
+			Size = size,
+		}
+
+		return root
+	end
+
 	--[[
 		The design canvas is 20x20 and a UIScale maps it to the requested size.
 		The UIScale sits on the *canvas*, not on the root: UIScale scales the
@@ -423,6 +521,13 @@ function Icons.setSize(icon, size, info)
 	entry.Size = size
 
 	local rootSize = UDim2.fromOffset(size, size)
+
+	-- Image icons stretch with their frame; drawn ones need the UIScale too.
+	if not entry.Scale then
+		icon.Size = rootSize
+		return icon
+	end
+
 	local target = { Scale = size / Icons.Grid }
 
 	if info then
@@ -486,6 +591,21 @@ end
 
 function Icons.isIcon(instance)
 	return Registry[instance] ~= nil
+end
+
+-- Every drawn kind, so a custom icon set knows what it can override.
+function Icons.kinds()
+	local list = {}
+	for kind in BUILDERS do
+		table.insert(list, kind)
+	end
+	table.sort(list)
+	return list
+end
+
+-- True when the kind resolves to something drawable (alias included).
+function Icons.has(kind)
+	return Icons.resolve(kind) ~= nil or isAsset(kind) or Images[kind] ~= nil
 end
 
 return Icons

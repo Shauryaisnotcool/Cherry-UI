@@ -1,6 +1,6 @@
 # Cherry UI — Function Reference
 
-Complete API for **Cherry UI v1.1.0**. Every function, config key and signal the library exposes, with runnable snippets.
+Complete API for **Cherry UI v1.2.0**. Every function, config key and signal the library exposes, with runnable snippets.
 
 > Looking for install steps instead? See [setup.md](setup.md) for Roblox Studio, [EXECUTORS.md](EXECUTORS.md) for `loadstring`/executor use, and [README.md](README.md) for the overview.
 
@@ -95,7 +95,7 @@ CherryUI:SetCursorMode("menu")
 ```lua
 local window = CherryUI:CreateWindow({
 	Title      = "Cherry",
-	Subtitle   = "FPS Suite · v1.1.0",
+	Subtitle   = "FPS Suite · v1.2.0",
 	Size       = UDim2.fromOffset(640, 460),   -- or Width / Height numbers
 	Width      = 640,
 	Height     = 460,
@@ -121,7 +121,7 @@ local window = CherryUI:CreateWindow({
 | `ClearNotice` | `()` | Dismiss the current notice. |
 | `Destroy` | `()` | |
 
-**Version check:** `print(CherryUI.Version)` — `1.1.0` is the release with drawn icons, the trailing cherry badge and in-window notices. An older number means a stale `dist/CherryUI.lua`.
+**Version check:** `print(CherryUI.Version)` — `1.2.0` is the release with drawn icons, the trailing cherry badge and in-window notices. An older number means a stale `dist/CherryUI.lua`.
 
 **Properties:** `Title`, `Subtitle`, `Width`, `Height`, `MinWidth`, `MinHeight`, `Resizable`, `Visible`, `Tabs`, `ActiveTab`, `Root`, `Frame`, `Content`, `SearchBox`, `Destroyed`.
 
@@ -534,6 +534,39 @@ Icons.bindTheme(icon, CherryUI, "Primary") -- follows theme changes
 
 `Icons.resolve(name) -> kind?` maps a string to a kind (returns `nil` for emoji/letters, which are rendered as text instead). Low-level builders: `Icons.line`, `Icons.ring`, `Icons.dot`, `Icons.diamond`, `Icons.outline` — all on a 20×20 grid (`Icons.Grid`).
 
+### Image icons (icons8, your own PNGs)
+
+A drawn icon is a set of frames; an image icon is one `ImageLabel` tinted with
+`ImageColor3`, so it follows the theme like the rest of the UI. Point any kind at
+a Roblox asset id:
+
+```lua
+CherryUI:SetIcons({
+	target  = "rbxassetid://1111111111",
+	layers  = "rbxassetid://2222222222",
+	players = "rbxassetid://3333333333",
+	settings = "rbxassetid://4444444444",
+	close   = "rbxassetid://7777777777",
+})
+```
+
+| Function | Meaning |
+| --- | --- |
+| `CherryUI:SetIcons(map) -> number` | Applies a whole pack. Call it **before** `CreateWindow`: icons are built with the interface, so already-rendered ones keep their old drawing. |
+| `Icons.setImage(kind, asset)` | One kind. `asset` must be `"rbxassetid://…"`; `nil` or `""` restores the drawn icon. Returns `true`/`false`. |
+| `Icons.setImages(map) -> number` | Same as `SetIcons`, without the library bookkeeping. |
+| `Icons.getImage(kind) -> string?` | The registered asset, if any. |
+| `Icons.isAsset(text) -> boolean` | Whether a string looks like `rbxassetid://…`. |
+| `Icons.kinds() -> { string }` | Every overridable kind name. |
+
+Anywhere an icon is accepted — `Window:AddTab(name, icon)`, `Notify` `Icon`,
+`ShowNotice` `Icon` — an `"rbxassetid://…"` string is rendered as an image instead
+of a drawn name.
+
+Roblox cannot load an `https://img.icons8.com/…` URL: the PNG must be uploaded
+and referenced by id. Full workflow, icon list and a fill-in pack template:
+**[docs/icons8](docs/icons8/README.md)**.
+
 ---
 
 ## 14. Utility modules
@@ -547,7 +580,7 @@ All are reachable from the library table (`CherryUI.Tween`, `CherryUI.Signal`, �
 | `Pool` | `Pool.new(create, reset, prewarm)`, `:Get(parent)`, `:Release(instance)`, `:ReleaseAll()`, `:Destroy()`. Used by notifications, dropdown options, player rows and the ESP chips. |
 | `Scheduler` | One `Heartbeat` loop for the whole library. `Scheduler:Every(interval, fn) -> task`, `:Remove(task)`, `:Clear()`, `:Destroy()`. 30 Hz by default. |
 | `Popup` | `Popup.new(library, { Name, Width, Height, OnClose })`, `:SetSize(w, h)`, `:Open()`, `:Close()`, `:Destroy()`. Used by dropdowns and the color picker. |
-| `Fade` | Whole-subtree fades without `CanvasGroup`: `Fade.set(root, alpha)`, `Fade.play(root, from, to, duration, style, direction, onComplete)`, `Fade.playing(root)`, `Fade.invalidate(root)`. |
+| `Fade` | Whole-subtree fades without `CanvasGroup`: `Fade.set(root, alpha)`, `Fade.play(root, from, to, duration, style, direction, onComplete)`, `Fade.playing(root)`, `Fade.invalidate(root)`, `Fade.reset(root, textOnly?) -> repaired, details` (restores stuck-invisible values), `Fade.forget(instance)`. |
 | `Util` | `clamp`, `round`, `trimNumber`, `keyName(enumItem)`, `matchesInput(input, binding)`, `hex(color)`, `fromHex(text)`, `copy(text)`. |
 | `Create` | `new(class, props, children)`, `corner`, `stroke`, `padding`, `list`, `label`, `textButton`, `shadow`. |
 | `Icons` | See [Icons](#13-icons). |

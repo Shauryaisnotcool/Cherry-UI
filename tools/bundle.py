@@ -95,7 +95,9 @@ def build(out_path: pathlib.Path, include_example: bool = False) -> int:
     bodies: list[tuple[str, str]] = []
 
     for key in sorted(modules):
-        if key == "Example" and not include_example:
+        # The example is never a module of the library bundle; it is appended to
+        # its own standalone file below.
+        if key == "Example":
             continue
         source = modules[key][0].read_text()
         rewritten, missing = rewrite(source, key, modules)
@@ -165,8 +167,20 @@ def build(out_path: pathlib.Path, include_example: bool = False) -> int:
     out.append("")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text("\n".join(out))
+    text = "\n".join(out)
+    out_path.write_text(text)
     print(f"Bundled {len(bodies)} modules -> {out_path.relative_to(ROOT) if out_path.is_relative_to(ROOT) else out_path}")
+
+    if include_example and "Example" in modules:
+        # A runnable demo: the library (which publishes `getgenv().CherryUI`),
+        # followed by the example script. The bundle's final `return CherryUI`
+        # is dropped because a chunk cannot return before more statements.
+        example_source = modules["Example"][0].read_text()
+        head = text.replace("\nreturn CherryUI\n", "\n", 1)
+        example_path = out_path.with_name(out_path.stem + "-Example" + out_path.suffix)
+        example_path.write_text(head + "\n-- ===== Example =====\n" + example_source)
+        print(f"Bundled example -> {example_path.relative_to(ROOT) if example_path.is_relative_to(ROOT) else example_path}")
+
     return 0
 
 
